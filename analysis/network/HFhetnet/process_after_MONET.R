@@ -12,7 +12,7 @@
 library(tidyverse)
 
 uw_modules= read_table("data/2022-06-15-154247__M1__result-modules__gene_edges_uw.tsv", col_names = F)
-uw_modules= read_table("data/2022-06-15-160355__M1__result-modules__gene_edges_uw.tsv", col_names = F)
+uw_modules= read_table("data/", col_names = F)
 
 uw_modules= read_delim("data/2022-06-17-113941__K1__result-modules__gene_edges_uw.tsv", col_names = F)
 length(colnames(uw_modules))
@@ -40,6 +40,7 @@ saveRDS(df.genelists, "data/Monet_K1_cluster.rds")
 # K1 ------------------------------------------------------------------------------------------
 
 uw_modules= read_delim("data/2022-06-17-113941__K1__result-modules__gene_edges_uw.tsv", col_names = F)
+
 length(colnames(uw_modules))
 df = unite(data= uw_modules[,3:length(colnames(uw_modules))], col= "geneset",  sep= ",")
 

@@ -91,7 +91,8 @@ end= end %>% left_join(gene_translate)
 
 ### simple enrich:
 g.list= readRDS( file = "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/output/HF_gene_ranks2.rds")
-
+g.hfpef= g.list[[1]]
+g.hfref= g.list[[2]]
 top_fib_genes= fibs$Gene.name[1:100]
 top_end_genes= end$Gene.name[1:100]
 
@@ -113,14 +114,53 @@ fibs.ref$pr$auc.integral
 fibs.ref$median_rank_stat
 fibs.pef$median_rank_stat
 
+## check fib signatures:
+fib.hfpef= read.csv("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/supplement_table3_hfpef.csv", sep = ";")%>%
+  mutate(study= "hfpef")
+fib.angII= read.csv("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/supplement_table3_angii.csv", sep = ";")%>%
+  mutate(study= "angii")
+fib.mi= read.csv("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/supplement_table3_mi.csv", sep = ";")%>%
+  mutate(study= "mi")
+
+df= rbind(fib.angII, fib.hfpef, fib.mi)%>% as_tibble() %>% rename(gene= ï..gene )%>% left_join(gene_translate)
+df= df %>% drop_na(Gene.name)
+gsets= split(df$Gene.name, df$study)
+
+
+validate_fgsea= function(g.ranks, col= "hfref.prio", gsets){
+
+  stats= g.ranks %>% arrange(desc({{col}})) %>% pull({{col}})
+  names(stats)= g.ranks %>% arrange(desc({{col}})) %>% pull(name)
+  fgseaSimple(pathways = gsets, stats = stats, nperm = 1000, scoreType = "pos")
+}
+
+validate_fgsea(g.ranks, "RW.value.hfpef", gsets = sets)
+
+validate_fgsea(g.ranks, "RW.value.hfpef", gsets = gsets)
+validate_fgsea(g.ranks, "RW.value.hfref", gsets = gsets)
+
+
 
 # ReHeaT ------------------------------------------------------------------
-sets= load_validation_genes(disgenet_value= 0.29, top_reheat = 100)
+sets= load_validation_genes(disgenet_value= 0.29, top_reheat = 500)
 sets$set_phe= NULL
 sets$set_reheat= NULL
 sets$set_reheat_up= NULL
 val.set= unique(unlist(sets))
 length(unique(unlist(sets)))
+
+validate_fgsea(g.ranks, "hfpef.prio", gsets = list("r"= val.set))
+validate_fgsea(g.ranks, "hfref.prio", gsets = list("r"= val.set))
+gsets= list("HF genes"= val.set,
+            "ReHeaT"= sets$set_reheat)
+
+gsea.pef= validate_fgsea(g.ranks, "RW.value.hfpef", gsets = gsets)%>% mutate(ranking= "HFpEF")
+gsea.ref= validate_fgsea(g.ranks, "RW.value.hfref", gsets = gsets)%>% mutate(ranking= "HFrEF")
+
+rbind(gsea.pef, gsea.ref)%>%
+  ggplot(., aes(x= ranking, y= pathway, fill = -log10(pval)))+
+  geom_tile()+
+  scale_fill_gradient(low= "white", high = "red")
 
 val.pef= validate_results_partial(val.set, g.hfpef)
 val.ref= validate_results_partial(val.set, g.hfref)
