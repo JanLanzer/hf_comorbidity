@@ -24,28 +24,25 @@ library(ComplexHeatmap)
 source("~/GitHub/HF_gene_mining/R/utils/utils_network.R")
 source("~/GitHub/HF_gene_mining/R/utils/utils.R")
 
-dd.net= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/networks/comorbidity/hfnet.rds")
+dd.net=Hfnet= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/networks/comorbidity/hfnet.rds")
 data = readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/ICD10_labeled_phe.rds")
 pids.list= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/cohort_pids/hf_types_pids.rds")
 
-link.data= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/networks/comorbidity/link_data.rds")
+link.data= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/networks/comorbidity/link_data2.rds")
 
 
 
 # compare neighbors -------------------------------------------------------
 
-
 hfpef = link.data$links %>%
-  filter(fisher.p.adj<0.01, (pcorr.corpor)>0.0) %>%
+  filter(fisher.p.adj<0.05, (corr.tet)>0.0) %>%
   filter(grepl("hfpef", disease2)) %>% arrange(desc(pcorr.corpor)) %>%
   dplyr::select(disease1, dis1_phenotype, dis2_phenotype, everything())# %>% pull(disease1)
 
 hfref = link.data$links %>%
-  filter(fisher.p.adj<0.01, (pcorr.corpor)>0.0) %>%
+  filter(fisher.p.adj<0.05, (corr.tet)>0.0) %>%
   filter(grepl("hfref", disease2)) %>% arrange(desc(pcorr.corpor)) %>%
   dplyr::select(disease1, dis1_phenotype, dis2_phenotype, everything())# %>% pull(disease1)
-
-
 
 
 # compare node characteristics --------------------------------------------
@@ -62,7 +59,7 @@ phe_dic= data%>%
           category= "circulatory system")
 
 
-
+phe_dic= link.data$phe_dic
 hfpef.centr= getProps_local(net = dd.net, directed = F,node =  "hfpef") %>% mutate(hf= "hfpef")
 hfref.centr= getProps_local(dd.net, F, "hfref")%>% mutate(hf= "hfref")
 
@@ -143,7 +140,7 @@ rownames(net_dist_uw) =
   phe_dic[match(rownames(net_dist_uw), phe_dic$PheCode),]%>% pull(Phenotype)
 colors = structure(c("white", cols.nice[]),names= c(1:6) )# black, red, green, blue
 colors = structure( c(1:6), c("white", cols.nice[]))
-p.uw= Heatmap(net_dist_uw,show_row_dend = F, name= "distance", col = c("grey", "darkred", "red"))
+p.uw= Heatmap(net_dist_uw,show_row_dend = F, name= "distance", col = c("grey", "blue","darkred",  "red"))
 print(p.uw)
 
 ## weighted distance=
@@ -176,6 +173,90 @@ print(p.node.feat)
 dev.off()
 
 
+
+
+# calculate distance for all nodes and scale for that  --------------------
+main_disease= c("585.3", "401.1", "272.13", "250.2", "296.22", "496",
+                "280.1","327.3","411.4", "hfpef", "hfref")
+
+## weighted distance=
+net_dist_w= distances(dd.net.inv,
+                      v = V(dd.net.inv),
+                      to = V(dd.net.inv),
+                      algorithm = "dijkstra",
+)
+
+
+net_dist_uw= distances(dd.net,
+                       v = V(dd.net),
+                       to = V(dd.net),
+                       algorithm = "unweighted",
+)
+
+
+M= sapply(main_disease, function(x){
+
+  #ztrans
+  m.= mean(net_dist_w[x,])
+  sd.= sd(net_dist_w[x,])
+
+  vecs= net_dist_w[x, main_disease]
+  z.vecs= (vecs-m.)/sd.
+
+  boxplot(net_dist_w[x,])
+  names(z.vecs)= phe_dic[match(names(z.vecs), phe_dic$PheCode),]%>% pull(Phenotype)
+
+  z.vecs
+})
+
+colnames(M)= rownames(M)
+Heatmap(M, cluster_rows = F, cluster_columns = F)
+
+M= scale(net_dist_w)
+
+dim(net_dist_w)
+
+boxplot(M)
+
+df= as_data_frame(dd.net, "vertices")
+df %>% as_tibble()
+
+
+
+node.list= split(df$name, df$group_cat)
+
+
+M= sapply(main_disease, function(x){
+
+
+  sapply(node.list, function(y){
+    m.= mean(net_dist_w[x,])
+    sd.= sd(net_dist_w[x,])
+
+    vecs= net_dist_w[x, y]
+    z.vecs= (vecs-m.)/sd.
+
+    mean(z.vecs)
+    #mean(vecs)
+  })
+
+
+})
+
+colnames(M) = phe_dic[match(colnames(M), phe_dic$PheCode),]%>% pull(Phenotype)
+Heatmap(M[, c("hfpef", "hfref", "hfmref")], cluster_columns = F, cluster_rows = F)
+P.distances_categories= Heatmap(M[, ], cluster_columns = F, cluster_rows = F, name= "distance (z-score)")
+pdf("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/figures/supp/comorbidity_net/distance_to_categories.pdf",
+    width= 5,
+    height= 5)
+P.distances_categories
+dev.off()
+
+## compare for disease categories...
+
+
+
+
 # cluster disease net -----------------------------------------------------
 
 net= dd.net
@@ -186,7 +267,7 @@ module.net= modularize(net)
 module.net$h.map
 
 
-pdf("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/figures/supp/comorbidity_net/node.module.categories.pdf",
+pdf("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/figures/main/fig2.node.module.categories.pdf",
     height = 5,
     width=7)
 module.net$h.map
@@ -217,7 +298,7 @@ net2 = module.net$fullnet
 E(net2)$weight= 1-E(net2)$weight
 clusts= unique(V(net)$group_louv)
 
-clust_dists= sapply(c("hfpef", "hfref"), function(y){
+clust_dists= sapply(c("hfpef","hfmref",  "hfref"), function(y){
   sapply(clusts, function(x){
 
     mean(distances(net2, y, V(net)$name[V(net2)$group_louv==x])  )
@@ -225,8 +306,13 @@ clust_dists= sapply(c("hfpef", "hfref"), function(y){
 })
 
 rownames(clust_dists)= clusts
-s= Heatmap(clust_dists, col = c("red", "black"))
+s= Heatmap(clust_dists, col = c("red", "blue"))
 print(s)
+
+
+# calculate distances between all nodes in the network and scale p --------
+
+
 
 #  save Nodes list of clusters -------------------------------------------------------------------
 
@@ -300,7 +386,7 @@ quickvisnet_clust= function(net, main = "net", save_comp = F){
   return(network)
 }
 hfpef.net = quickvisnet_clust(g.hfpef, "HFpEF cluster", F)
-hfref.net= quickvisnet_clust(g.hfref, "HFrEF cluster", T)
+hfref.net= quickvisnet_clust(g.hfref, "HFrEF cluster", F)
 #
 #
 # c(neighbors(g, "hfref"), neighbors(g, "hfpef"))
@@ -314,3 +400,54 @@ hfref.net= quickvisnet_clust(g.hfref, "HFrEF cluster", T)
 
 
 
+# resistnace distance -----------------------------------------------------
+
+# http://yaroslavvb.com/papers/bapat-simple.pdf
+resistance_dist_some <- function(graph, from = V(graph), to = V(graph)) {
+  from <- as.numeric(from)
+  to <- as.numeric(to)
+  L <- laplacian_matrix(graph)
+  Omega <- matrix(NA, nrow = vcount(graph), ncol = vcount(graph))
+  rownames(Omega)= rownames(L) = from
+  colnames(Omega)= colnames(L)= to
+  for (i in from) {
+    Li <- L[-i, -i]
+    for (j in to) {
+      Lij <- L[-c(i, j), -c(i, j)]
+      Omega[i, j] <- Matrix::det(Lij) / Matrix::det(Li)
+    }
+  }
+  colnames(Omega)= rownames(Omega)= V(graph)$name
+  Omega
+
+}
+graph=net.mod$fullnet
+i= from[1]
+
+Hfnet2= Hfnet
+E(Hfnet2)$weight= NULL
+graph = Hfnet
+
+d = resistance_dist_some(graph)
+
+resistance_dist_all <- function(graph) {
+  L <- laplacian_matrix(graph)
+  Gamma <- L + 1 / vcount(graph)
+  Gamma_inv <- base::solve(Gamma)
+  Omega <- matrix(diag(Gamma_inv), nrow = vcount(graph), ncol = vcount(graph)) +
+    t(matrix(diag(Gamma_inv), nrow = vcount(graph), ncol = vcount(graph))) -
+    2 * Gamma_inv
+  Omega
+}
+
+d= resistance_dist_all(Hfnet)
+
+inverse_min_cut <- function(graph) {
+  1 / sapply(V(graph), function(i) sapply(V(graph), function(j) {
+    if (i == j) Inf else {
+      igraph::min_cut(graph, source = i, target = j)
+    }
+  }))
+}
+
+inverse_min_cut(Hfnet)

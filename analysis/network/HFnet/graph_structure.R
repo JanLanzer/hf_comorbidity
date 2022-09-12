@@ -28,21 +28,23 @@ dd.net= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/network
 data = readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/ICD10_labeled_phe.rds")
 pids.list= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/cohort_pids/hf_types_pids.rds")
 link.data= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/networks/comorbidity/link_data.rds")
-
+dd.net= net
 phe_dic= link.data$phe_dic
 ## CAVE: when calculating shortest path with igraph, or other metrics that rely on edge weights.
 # weights can be interpreted as "costs", i.e. high weight is high distance between two nodes.
 # create weight inverted net
 dd.net.inv = dd.net
 #E(dd.net.inv)$weight= (1/(E(dd.net.inv)$weight-1))+1
-E(dd.net.inv)$weight = 1-E(dd.net.inv)$weight
+x= E(dd.net.inv)$weight
+1/(1-x)
+
+E(dd.net.inv)$weight = 1/(1-x)
 
 
 
 # calculate df with node centralitiy measures  ----------------------------
 
-
-centrality.df= enframe(degree(dd.net), value= "degree", name= "PheCode")
+centrality.df= enframe(igraph::degree(dd.net), value= "degree", name= "PheCode")
 centrality.df$size= V(dd.net)$size
 centrality.df$strength= strength(dd.net)
 centrality.df= centrality.df %>% left_join(phe_dic)

@@ -268,9 +268,9 @@ plot_summary_table=function(df, col.order= c()){
     tbl_summary(by = patient_cohort) %>%
     add_p()%>%
     add_overall()%>%
-    add_n() %>%
-    modify_header(label ~ "**Variable**") %>%
-    modify_spanning_header(c("stat_1", "stat_2") ~ "**Main Cohort**")
+    add_n() #%>%
+    #modify_header(label ~ "**Variable**") %>%
+    #modify_spanning_header(c("stat_1", "stat_2") ~ "**Main Cohort**")
 
 }
 

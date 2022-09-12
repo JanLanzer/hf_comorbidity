@@ -48,6 +48,7 @@ HF_allcause= c("I11.0", "I13.0", "I13.2", "I25.5", "I42.0", "I42.5", "I42.8", "I
 pids= unlist(pids.list$hf_all)
 #pids= unlist(pids.list[2:4])
 pids= unlist(c(pids.list$hfref,pids.list$hfpef))
+#remove process data
 data= data%>% filter(!startsWith(entry_value, "Z"))
 
 #calculate disease frequencies
@@ -85,39 +86,10 @@ dev.off()
 
 saveRDS(phecodes, "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/top300_disease.rds")
 
-
-## function to add hfref and hfpef as diagnosis codes to the data
-
-get_pid_df= function(pids, name2){
-  enframe(pids, value= "pid") %>% mutate(PheCode= name2) %>% select(-name)
-
-}
-
-hfref= get_pid_df(pids.list$hfref, "hfref")
-hfpef= get_pid_df(pids.list$hfpef, "hfpef")
-#hfmref= get_pid_df(pids.list$hfmref, "hfmref")
-
-#append data
-data_grouped = data %>%
-  distinct(pid,PheCode) %>%
-  drop_na
-
-data_comb= rbind(hfpef, hfref,# hfmref,
-                 data_grouped)
-
-#update phedic:
-Phe_dic= rbind(Phe_dic,
-               c("hfref", "hfref", "circulatory system"),
-               c("hfpef", "hfpef", "circulatory system"))
-               #c("hfmref", "hfmref", "circulatory system")
-
-
-data_comb= data_comb %>% left_join(Phe_dic)
-phecodes= c(phecodes, "hfref", "hfpef")#ä, "hfmref")
-
+data_r= data %>% distinct(pid, PheCode, Phenotype)
 .links= create.links(pids= pids,
                      phecodes = phecodes,
-                     data= data_comb)
+                     data= data_r)
 
 ##
 saveRDS(.links, file ="T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/networks/comorbidity/link_table_hf_cohort_fil.rds" )
@@ -131,34 +103,6 @@ saveRDS(list("links"= .links,
         "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/networks/comorbidity/link_data.rds")
 
 # check hf nodes: ---------------------------------------------------------
-#
-.links %>%
-  filter(rho_part_lower >0.00 & fisher.p.adj<1) %>%
-  filter(grepl("hfpef", disease2)) %>% arrange(desc(pcorr.corpor)) %>%
-  dplyr::select(disease1, dis1_phenotype, dis2_phenotype,pcorr.corpor, everything())%>%
-  print(n=199)# %>% pull(disease1)
-
-
-.links %>%
-  filter( fisher.p.adj<0.05, odds.ratio>1) %>%
-  filter(grepl("hfpef", disease2)) %>% arrange(desc(pcorr.corpor)) %>%
-  dplyr::select(disease1, dis1_phenotype, dis2_phenotype, everything()) %>% print(n=199)# %>% pull(disease1)
-
-
-.links %>%
-  filter(rho_part_lower >0) %>%
-  filter(grepl("hfref", disease2)) %>% arrange(desc(pcorr.corpor)) %>%
-  dplyr::select(disease1, dis1_phenotype, dis2_phenotype, everything())%>% print(n=199) #%>% pull(disease1)
-
- .links %>%
-  filter(fisher.p.adj<0.05, odds.ratio>1) %>%
-  filter(grepl("hfref", disease2)) %>% arrange(desc(pcorr.corpor)) %>%
-  dplyr::select(disease1, dis1_phenotype, dis2_phenotype, everything()) %>% print(n=199)#%>% pull(disease1)
-
-# hfmref = .links %>%
-#   filter(rho_part_lower >0, fisher.p.adj<0.05) %>%
-#   filter(grepl("hfmref", disease2)) %>% arrange(desc(pcorr.corpor)) %>%
-#   dplyr::select(disease1, dis1_phenotype, dis2_phenotype, everything())# %>% pull(disease1)
 
 # cluster HFnet -----------------------------------------------------------------
 hist(.links$corr.tet)
@@ -194,12 +138,12 @@ hist(.links$rho_part_lower)
 
 net= quick_base_net(.links%>% filter(rho_part_lower>0.00, fisher.p.adj<1),#, fisher.p.adj<0.05),
                 pids,
-               data_comb,
+               data_r,
                weight_col ="pcorr.corpor")
 
 net= quick_base_net(.links%>% filter(corr.tet>0, fisher.p.adj<0.05),
                      pids,
-                     data_comb,
+                     data_r,
                      weight_col ="corr.tet")
 
 
@@ -208,10 +152,10 @@ net= quick_base_net(.links%>% filter(corr.tet>0, fisher.p.adj<0.05),
 set.seed(2)
 net.mod= modularize(net, method= "spinglass")
 net.mod= modularize(net, method= "louvain")
-net.mod= modularize(net, method= "leiden",resolution_parameter = 1)
-
+net.mod= modularize(net, method= "leiden",resolution_parameter = 40)
 Hfnet= net.mod$fullnet
 net.mod$h.map
+
 links= igraph::as_data_frame(Hfnet, "edges")
 nodes= igraph::as_data_frame(Hfnet, "vertices")
 nodes %>% filter(name %in% c("hfpef", "hfref", "hfmref"))

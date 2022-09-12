@@ -34,7 +34,7 @@ data = readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohor
 
 pids.list= readRDS(paste0(directory,"data/hf_cohort_data/cohort_pids/hf_types_pids.rds"))
 
-.links= readRDS( file ="T:/fsa04/MED2-HF-Comorbidities/lanzerjd/data_output/.links_unified_dd2.rds" )
+.links= readRDS( file ="T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/networks/comorbidity/link_table_hf_cohort_fil.rds")
 
 hpo_net= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/output/hpo_net.rds" )
 HFnet= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/networks/comorbidity/hfnet.rds")
@@ -147,6 +147,14 @@ RWRH_PPI_Disease_Results2 <-
                                    Multiplex2_Seeds = "hfref",
                                    r=0.8)
 
+RWRH_PPI_Disease_Results3 <-
+  Random.Walk.Restart.MultiplexHet(x= PPIHetTranMatrix,
+                                   MultiplexHet_Object = PPI_Disease_Net,
+                                   Multiplex1_Seeds= c(),
+                                   Multiplex2_Seeds = "hfmref",
+                                   r=0.8)
+
+
 g.hfpef= RWRH_PPI_Disease_Results$RWRMH_Multiplex1 %>%
   dplyr::rename(value= Score,
          name= NodeNames)%>% as_tibble()
@@ -155,3 +163,7 @@ g.hfref= RWRH_PPI_Disease_Results2$RWRMH_Multiplex1 %>%
   dplyr::rename(value= Score,
          name= NodeNames)%>% as_tibble()
 
+
+g.hfpef= RWRH_PPI_Disease_Results3$RWRMH_Multiplex1 %>%
+  dplyr::rename(value= Score,
+                name= NodeNames)%>% as_tibble()

@@ -31,21 +31,25 @@ library(ggrepel)
 # Read data and prepare ---------------------------------------------------
 
 # read tables.
+source("~/GitHub/RWH_analysis/scripts/utils.R")
+
 directory= "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/"
 
 icd = readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/ICD10_labeled_phe.rds")
 #pids.list= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/cohort_pids/hf_types_pids.rds")
-map(pids.list,length)
+icd = icd %>% left_join(phedic %>% distinct(PheCode, Phenotype))
+phedic= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/icd10_phewas_dictionary.rds")
+
 phecodes= readRDS( "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/top300_disease.rds")
 
 pids.list= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/cohort_pids/hf_types_pids.rds")
-
+map(pids.list,length)
 hf = read.csv("T:fsa04/MED2-HF-Comorbidities/data/RWH_March2020/levinson_comorbidities_in_hf_patients_2020-03-25.csv",
               sep = ";",
               na.strings=c("","NA")) %>% as_tibble
 
 pheno.data= readRDS(file= "T:/fsa04/MED2-HF-Comorbidities/data/processed_data/full_clinic_info.rds")
-source("~/GitHub/RWH_analysis/scripts/utils.R")
+
 
 
 # Functions ---------------------------------------------------------------
@@ -59,7 +63,7 @@ MCAinput = function(df){
     lapply(function(x) strsplit(x, "-")) %>%
     mtabulate()%>%
     matrix2df("pid") %>%
-    as_data_frame(check.names = FALSE) %>%
+    dplyr::as_data_frame(check.names = FALSE) %>%
     column_to_rownames("pid")
 
   df2= data.frame(lapply(df, as.character), stringsAsFactors=FALSE)
@@ -108,7 +112,7 @@ plot_MCA_results = function(res.mca){
   x= fviz_screeplot(res.mca, addlabels = TRUE, ylim = c(0, 45))
 
   x2= fviz_mca_biplot(res.mca,
-                      repel = F, # Avoid text overlapping (slow if many point)
+                      repel = F, # Avoids text overlapping (slow if many point)
                       ggtheme = theme_minimal(),
                       geom = "point",
                       label= c("var", "quali.sup"))
@@ -129,8 +133,11 @@ plot_MCA_results = function(res.mca){
 
 
 # Data subsetting (pre MCA) -----------------------------------------------------------------------
-icd_red = icd %>% drop_na %>% distinct(pid, PheCode) %>% filter(pid %in% c(pids.list$hfpef, pids.list$hfref),
-                                                                PheCode %in% phecodes)
+icd_red = icd %>%
+  drop_na %>%
+  distinct(pid, PheCode) %>%
+  filter(pid %in% c(pids.list$hfpef, pids.list$hfref, pids.list$hfmref),
+                 PheCode %in% phecodes)
 
 # icd_red is full dataset to work with. This will now be subsetted to answer specific questions of interest.
 length(unique(icd_red$pid))
@@ -156,7 +163,6 @@ mca.res = MCA(mca.df, ncp = ndims)
 mca.res.df= plot_MCA_df(mca.res, ndim  =ndims )
 
 
-
 # add clinical covariates -------------------------------------------------
 #add.pheno.data
 
@@ -165,18 +171,10 @@ ind.df= mca.res.df %>%
 #%>%
 #  left_join(pheno.data %>% dplyr::rename(ID= patient_id)%>% mutate(ID =as.character(ID)), by= "ID")
 
-#add.patient.cohort:
-ind.df= ind.df%>%   mutate(hf.type = ifelse(ID %in% pids.list$hfref,
-                                       "hfref",
-                                       ifelse(ID %in% pids.list$hfpef,
-                                              "hfpef",
-                                              ifelse(ID %in% pids.list$hfmref,
-                                                     "hfmref",
-                                                     "unlabeled")))
-)
 
 # add clinical endpoints:
 endpoint= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/data_output/pids_endpoints.rds")
+
 ind.df= ind.df%>%
   mutate(htx= ifelse(ID %in% endpoint$htx, "yes", "no"),
          intu= ifelse(ID %in% endpoint$intubation, "yes", "no"),
@@ -216,14 +214,21 @@ sum.tfilt= sum.t %>%
 
 ind.df= ind.df %>% left_join(sum.tfilt%>% dplyr::rename(ID= pid)%>% mutate(ID= as.character(ID)), by= "ID")
 
+#add.patient.cohort:
+ind.df= ind.df%>%   mutate(hf.type = ifelse(ID %in% pids.list$hfref,
+                                            "hfref",
+                                            ifelse(ID %in% pids.list$hfpef,
+                                                   "hfpef",
+                                                   ifelse(ID %in% pids.list$hfmref,
+                                                          "hfmref",
+                                                          "unlabeled"))))
 ## run wilcox to see if it associates dim1 with hf
-
 
 dim_= paste0("Dim", seq(1:ndims-1))
 
 df= ind.df
-## loop over categorical variables , perform wilcox
-cat.vars= c("hf.type", "sex", "htx", "intu", "defi", "pci")
+## loop over categorical variables with two levels and perform wilcox
+cat.vars= c( "sex",  "intu", "defi", "pci")
 
 tested.vars= map(cat.vars, function(x){
   print(x)
@@ -244,13 +249,125 @@ tested.vars= map(cat.vars, function(x){
 
   df.variance= eig.val[1:length(pvals),]
 
-  associated_hf =cbind(df.variance, pvals) %>% as_tibble%>% mutate(sig= ifelse(pvals<0.05, "sig", "ns"))%>% group_by(sig)%>%
-    summarise(s= sum(variance.percent)) %>% mutate(var= x)
+  associated_hf =cbind(df.variance, pvals) %>%
+    as_tibble%>%
+    mutate(sig= ifelse(pvals<0.05, "sig", "ns"))%>%
+    group_by(sig)%>%
+    summarise(s= sum(variance.percent)) %>%
+    mutate(var= x)
 
 })
 
-p.cat= do.call(rbind, tested.vars)%>%filter(sig=="sig")%>%
-  ggplot(., aes(x= reorder(var, -s), y= s))+
+cat.df= do.call(rbind, tested.vars)%>%filter(sig=="sig")
+
+#redo for hf.type (4 levels)
+###
+hf.var= data.frame(matrix(nrow = length(unique(df$hf.type)),
+                          ncol = length(unique(df$hf.type))
+                          ),
+                   row.names = unique(df$hf.type)
+                  )
+colnames(hf.var)= unique(df$hf.type)
+
+
+for (x in unique(df$hf.type)) {
+  print(x)
+  for (y in unique(df$hf.type)){
+    print(y)
+    if(x==y){
+      hf.var[x,y]= 0
+    }else{
+      print( paste(x,"vs.",  y))
+      hf_t = df %>% filter(hf.type== x)
+      hf_f = df %>% filter(hf.type== y)
+
+      pvals= map(dim_, function(x){
+        test. = wilcox.test(hf_t %>% pull(x),
+                            hf_f%>% pull(x),
+                            alternative = "two.sided")
+        test.$p.value
+      }) %>%unlist()
+
+      #combine with variance explained:
+      eig.val <- get_eigenvalue(mca.res)
+
+      df.variance= eig.val[1:length(pvals),]
+
+      associated_hf =cbind(df.variance, pvals) %>%
+        as_tibble%>%
+        mutate(sig= ifelse(pvals<0.05, "sig", "ns"))%>%
+        group_by(sig)%>%
+        summarise(s= sum(variance.percent))
+
+      var.sum= associated_hf%>% filter(sig== "sig")%>% pull(s)
+      print(var.sum)
+
+      #add to matrix
+      hf.var[x,y]= var.sum
+
+      #names(var.sum)= paste(x,"vs.",  y)
+      #return(c(var.sum, paste(x,"vs.",  y)))
+
+      }
+
+
+  }
+}
+
+ComplexHeatmap::Heatmap(hf.var)
+
+
+
+#old way (just differnet data structure, same analysis)
+hftype= lapply(unique(df$hf.type), function(x){
+  sapply(unique(df$hf.type), function(y){
+    if(x==y){return(0)}
+
+    print( paste(x,"vs.",  y))
+    hf_t = df %>% filter(hf.type== x)
+    hf_f = df %>% filter(hf.type== y)
+
+    pvals= map(dim_, function(x){
+      test. = wilcox.test(hf_t %>% pull(x),
+                          hf_f%>% pull(x),
+                          alternative = "two.sided")
+      test.$p.value
+    }) %>%unlist()
+
+    #combine with variance explained:
+    eig.val <- get_eigenvalue(mca.res)
+
+    df.variance= eig.val[1:length(pvals),]
+
+    associated_hf =cbind(df.variance, pvals) %>%
+      as_tibble%>%
+      mutate(sig= ifelse(pvals<0.05, "sig", "ns"))%>%
+      group_by(sig)%>%
+      summarise(s= sum(variance.percent))
+
+    var.sum= associated_hf%>% filter(sig== "sig")%>% pull(s)
+    print(var.sum)
+
+    #add to matrix
+    hf.var[x,y]= var.sum
+
+    #names(var.sum)= paste(x,"vs.",  y)
+    return(c(var.sum, paste(x,"vs.",  y)))
+  })
+})
+
+
+
+cat.df= rbind(cat.df,
+      c("sig",hftype[[1]]$hfref[1], "HFrEF v. HFpEF" ),
+      c("sig",hftype[[1]]$hfmref[1], "HFmrEF v. HFpEF" ),
+      c("sig",hftype[[2]]$hfmref[1], "HFmrEF v. HFrEF" )
+      )%>%
+  mutate(s = as.numeric(s))
+
+
+p.cat= cat.df%>%filter(sig=="sig")%>%
+  ggplot(., aes(x= reorder(var, s), y= s))+
   geom_col()+
   labs(y= "percentage of variance explained (%)",
        x= "tested covariate")+
@@ -310,23 +427,48 @@ cowplot::plot_grid(p.cat, p.cont, align = "h")
 
 #plot both tests together:
 
-p.explained_V= do.call(rbind, c(tested.vars.cont, tested.vars))%>%
-  mutate(var.type= ifelse(var %in% cat.vars, "cat","cont"))%>%
-  filter(sig=="sig")%>%
+df.explained_V= rbind(do.call(rbind, tested.vars.cont) , cat.df)%>%
+  mutate(var.type= ifelse(var %in% cat.vars, "categorical",
+                          ifelse(grepl("HF", var), "HF subtypes", "continuous")))%>%
+  filter(sig=="sig") #%>%
+  dplyr::rename("Sex"= sex,
+                "Age (y)" = age.at.mean,
+                BMI = median.BMI,
+                #"EF(%)"= ef.min,
+                "Systolic RR (mmHg)"= mean.sys,
+                "Diastolic RR (mmHg)"= mean.dias,
+                "LDL (mg/dl)"= median.LDL,
+                "HDL (mg/dl)"= median.HDL,
+                "TC (mg/dl)"= median.Trigs,
+                "Chol (mg/dl)"= median.Chol,
+                "n(PheCodes)"= PheCode_count,
+                "Intubated"= intu,
+                "Elixhauser Score"= elixhauser_wscore,
+                #Charlson Index= charlson_score,
+                #HTX= htx,
+                "PCI"= pci,
+                "ICD implantation"= defi
+  )
+
+p.explained_V= df.explained_V%>%
   ggplot(., aes(x= reorder(var, s), y= s, fill = var.type))+
   geom_col()+
-  labs(y= "estimated percentage of variance explained (%)",
-       x= "tested covariate")+
+  scale_fill_manual(values= c("#AA5042", "#4F3130", "black"))+
+  labs(y= "Estimated percentage of variance explained (%)",
+       x= "Tested covariate",
+       fill= "Variable type")+
   theme(legend.position =  "none")+
   coord_flip()+
   theme_minimal()+
-  theme(axis.text = element_text(color= "black"))
+  theme(axis.text = element_text(color= "black"),
+        legend.position = "bottom",
+        legend.text = element_text(size= 8))
 
 p.explained_V
 
 
 pdf("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/figures/main/explained_V.pdf",
-    height = 3, width= 5)
+    height = 4, width= 5.5)
 p.explained_V
 
 dev.off()
@@ -344,8 +486,14 @@ df= mca.df%>% mutate_all(as.numeric)
 umap_res= umap(df)
 
 umap.plot = as_tibble(cbind(as_tibble(umap_res$layout), pid=  rownames(df))) %>%
-  mutate(hf= ifelse(pid %in% pids.list$hfpef,"hfpef", "hfref"),
-         hf= factor(hf, levels= c("hfpef", "hfref") )) %>%
+  mutate(hf = ifelse(pid   %in% pids.list$hfref,
+                                "HFrEF",
+                                ifelse(pid   %in% pids.list$hfpef,
+                                       "HFpEF",
+                                       ifelse(pid   %in% pids.list$hfmref,
+                                              "HFmrEF",
+                                              "unlabeled"))))%>%
+  mutate(hf= factor(hf, levels= c("HFpEF","HFmrEF", "HFrEF", "unlabeled"))) %>%
   left_join(sum.tfilt%>% mutate(pid= as.character(pid)), by= "pid")%>%
   mutate(HTX= ifelse(pid %in% endpoint$htx, "yes", "no"),
          Intubation= ifelse(pid %in% endpoint$intubation, "yes", "no"),
@@ -353,19 +501,24 @@ umap.plot = as_tibble(cbind(as_tibble(umap_res$layout), pid=  rownames(df))) %>%
          PCI= ifelse(pid %in% endpoint$pci, "yes", "no"))
 
 p.umap.hf =ggplot(umap.plot, aes(x= V1, y= V2, color = hf))+
-  geom_point(alpha= 0.7, size= .5)+
-  scale_color_manual(values= col.set)+
+  geom_point(alpha= 0.7, size= 1)+
+  #scale_color_manual(values=c( col.set[2], "#7FC6A4", col.set[3]))+
+  scale_color_manual(values=c( col.set[-1]))+
   labs(color="HF cohort",
        x= "",
        y = "")+
-  theme_classic()
+  theme_classic()+
+  guides(colour = guide_legend(override.aes = list(size=4)))
+
+p.umap.hf
 
 p.umap.defi =ggplot(umap.plot, aes(x= V1, y= V2, color = ICD_implant))+
   geom_point(alpha= 0.7, size= .5)+
   scale_color_manual(values= col.set)+
   labs( x= "",
        y = "")+
-  theme_classic()
+  theme_classic()+
+  guides(colour = guide_legend(override.aes = list(size=4)))
 
 p.umap.htx =ggplot(umap.plot, aes(x= V1, y= V2, color = HTX))+
   geom_point(alpha= 0.7, size= .5)+
@@ -379,18 +532,27 @@ p.umap.sex =ggplot(umap.plot%>% mutate(sex=factor(sex, levels=c("m", "f"))), aes
   scale_color_manual(values= col.set)+
   labs( x= "",
         y = "")+
-  theme_classic()
+  theme_classic()+
+  guides(colour = guide_legend(override.aes = list(size=4)))
 
 p.umap.pci=ggplot(umap.plot, aes(x= V1, y= V2, color = PCI))+
   geom_point(alpha= 0.7, size= .5)+
   scale_color_manual(values= col.set)+
   labs( x= "",
         y = "")+
-  theme_classic()
+  theme_classic()+
+  guides(colour = guide_legend(override.aes = list(size=4)))
 
 ##
 
 p.umap.age =ggplot(umap.plot, aes(x= V1, y= V2, color = age.at.mean))+
+  geom_point(alpha= 0.7, size= .5)+
+  scale_color_gradient(low= "orange", high= "black")+
+  labs( x= "",
+        y = "")+
+  theme_classic()
+
+p.umap.charlson =ggplot(umap.plot, aes(x= V1, y= V2, color = charlson_score ))+
   geom_point(alpha= 0.7, size= .5)+
   scale_color_gradient(low= "orange", high= "black")+
   labs( x= "",
@@ -420,14 +582,20 @@ p.umap.bnp =ggplot(umap.plot, aes(x= V1, y= V2, color = log10(median.bnp)))+
   scale_color_gradient(low= "orange", high= "black")+
   labs( x= "",
         y = "")+
-  theme_classic()
+  theme_classic()+
+  guides(fill  = guide_legend(override.aes = list(size = 0.1)))
 
-
+p.umap.bnp
 p.umap.hba1c
-main.umaps= cowplot::plot_grid( p.umap.defi, p.umap.htx, p.umap.hf,p.umap.sex, p.umap.age,p.umap.bmi, ncol = 2)
+main.umaps= cowplot::plot_grid( p.umap.defi,
+                                p.umap.hf,
+                                p.umap.charlson,
+                                p.umap.sex,
+                                p.umap.age,
+                                p.umap.bmi, ncol = 2, align = "hv")
 
-p.umap.age
 
+main.umaps
 pdf("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/figures/manuscript/main/umaps_cat.pdf")
 cowplot::plot_grid(p.umap.hf,p.umap.sex, p.umap.htx, p.umap.defi, p.umap.pci)
 dev.off()
@@ -438,7 +606,7 @@ cowplot::plot_grid(p.umap.age, p.umap.hba1c, p.umap.bmi,p.umap.bnp)
 dev.off()
 
 pdf("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/figures/main/umaps_main.pdf",
-    height= 6, width= 6)
+    height= 6, width= 7.5)
 main.umaps
 dev.off()
 
@@ -448,7 +616,7 @@ main_disease= c("585.3", "401.1", "272.13", "250.2", "296.22", "496",
 
 pls= map(main_disease, function(feature){
   pids.x= icd_red %>% filter(PheCode == feature) %>% pull(pid)
-  #pheno.x= icd%>%  filter(PheCode == feature) %>% pull(Phenotype)%>% unique()
+  pheno.x= icd%>%  filter(PheCode == feature) %>% pull(Phenotype)%>% unique()
   umap.plot %>% mutate(dis1= ifelse(pid %in% pids.x, "y", "n"))%>%
     ggplot(., aes(x= V1, y= V2, color = dis1))+
     geom_point(alpha= 0.7, size= .5)+
@@ -456,7 +624,7 @@ pls= map(main_disease, function(feature){
     labs( x= "",
           y = "")+
     theme_classic()+
-    ggtitle(paste0(feature))
+    ggtitle(paste0(feature,pheno.x))
 })
 pdf("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/figures/main/umaps_supp.pdf",
     height= 6, width= 6)
@@ -504,11 +672,11 @@ p.tsne
 # select patients ---------------------------------------------------------
 
 
-pids.oi = umap.plot %>% filter(V2 > 4.5) %>% pull(pid)
-
+pids.oi = umap.plot %>% filter(V2 < -4) %>% pull(pid)
+pids.oi = icd_red %>% filter(pid %in% htx.cohort$defi)%>% pull(pid)
 
 pids.oi
 
-x= disease_frequencies(pids = pids.oi, icd)
-
-icd %>% filter(PheCode =="425.1", pid %in% pids.oi) %>% distinct(icd4, PheCode)
+x= disease_frequencies(pids = pids.oi, icd = icd)
+xy= disease_frequencies(pids = unlist(pids.list[2:3])[!unlist(pids.list[2:3]) %in% pids.oi], icd = icd)
+icd %>% filter(PheCode =="425.1", !pid %in% pids.oi) %>% distinct(icd4, PheCode)

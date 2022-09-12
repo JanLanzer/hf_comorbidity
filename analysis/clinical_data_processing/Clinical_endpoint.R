@@ -130,6 +130,8 @@ PCI = unique(ops_PCI$pid)
 
 table(PCI %in% unlist(pids.list[2:4]))
 
+
+table(ops_PCI %>% filter(pid %in% pids.list$hfref)%>% distinct(pid, entry_value_3)%>% pull(entry_value_3))
 # intubation -----------------------------------------------------
 
 ops_intu= ops %>% filter(entry_value_3 %in% c("8-701","8-704","8-706", "8-852") )

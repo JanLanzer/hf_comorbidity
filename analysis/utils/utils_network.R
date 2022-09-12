@@ -416,20 +416,23 @@ quick_base_net = function(links, pids, data, weight_col = "corr.phi"){
                              vertices = freqs$PheCode,
                              directed = F)
   ## attributes:
-  V(net)$size= log(freqs$freq)
+  V(net)$size= log10(freqs$freq)
   V(net)$description = freqs$Phenotype
   V(net)$group_cat= freqs$category
 
-  #edges, weight
-  if (weight_col == "pcorr.corpor"){
-    E(net)$weight = E(net)$pcorr.corpor
-    }else if(weight_col == "cor2pcor"){
-      E(net)$weight = E(net)$pcor.corpor
-    }else if(weight_col == "rho"){
-      E(net)$weight = E(net)$rho
-    }else if(weight_col == "corr.phi"){
-      E(net)$weight = E(net)$corr.phi
-    }
+  E(net)$weight = igraph::as_data_frame(net, "edges")[[weight_col]]
+
+
+  # #edges, weight
+  # if (weight_col == "pcorr.corpor"){
+  #   E(net)$weight = E(net)$pcorr.corpor
+  #   }else if(weight_col == "cor2pcor"){
+  #     E(net)$weight = E(net)$pcor.corpor
+  #   }else if(weight_col == "rho"){
+  #     E(net)$weight = E(net)$rho
+  #   }else if(weight_col == "corr.phi"){
+  #     E(net)$weight = E(net)$corr.phi
+  #   }
 
   return(net)
 }
@@ -477,6 +480,103 @@ module= function(net){
   }
 
   return(list(plot = plot, fullnet = net, HFmodule= net2))
+}
+
+
+
+#function to perform louvain_partion based on maximal modularity
+#' @param , net =igraph net, (UW) to for community analysis
+
+modularize= function(net, method= "lovain", ...){
+
+  #lovain
+  if(method== "louvain"){
+    louvain_partition <- igraph::cluster_louvain(net, weights = E(net)$weight)
+
+  }else if(method== "spinglass"){
+    louvain_partition= cluster_spinglass(net,
+                               weight= E(net)$weight)
+  }else if(method== "leiden"){
+    louvain_partition= cluster_leiden(net,objective_function = "modularity",
+                                         weight= E(net)$weight,
+                                      resolution_parameter = 1)
+    #louvain_partition
+  }
+
+  #louvain_partition = igraph::cluster_spinglass(net, weights = E(net)$weight)
+  print(modularity(net, louvain_partition$membership,weights= E(net)$weight))
+
+  V(net)$group_louv= louvain_partition$membership
+
+  nodes = as_tibble(igraph::as_data_frame(net, what = "vertices"))
+
+  nodes_count= nodes %>%
+    complete(group_louv, group_cat)%>%
+    mutate(group_louv = factor(group_louv))%>%
+    group_by(group_louv, group_cat) %>%
+    count()
+
+  p.abs=
+    nodes_count %>%
+    ggplot(aes(x= group_louv, y= group_cat, fill = n))+
+    geom_tile()+
+    scale_fill_gradient(low= "white", high= "red")
+  scale_fill_continuous(na.value = 'white')
+
+  p.props= nodes_count %>%
+    ungroup()%>%
+    group_by(group_louv)%>%
+    mutate(prop = n/sum(n))%>%
+    ggplot(aes(x= group_louv, y= group_cat, fill = prop))+
+    geom_tile()+
+    scale_fill_gradient(low= "white", high= "red")
+
+
+  mat= nodes_count %>%
+    ungroup()%>%
+    group_by(group_louv)%>%
+    mutate(prop = (n/sum(n))*100)
+
+  cat.count= mat%>%
+    ungroup()%>%
+    group_by(group_cat)%>%
+    mutate(x= sum(n))%>%
+    distinct(group_cat, x)
+
+
+  library(circlize)
+  col_fun = colorRamp2(c(0,50, 100), c("white", "red", "darkred"))
+  col_fun(seq(0, 1))
+
+  cluster.size= mat%>% group_by(group_louv) %>% summarise(sum= sum(n))
+  ha = HeatmapAnnotation(cluster.size = anno_barplot(cluster.size$sum,
+                                                     add_numbers = TRUE, height = unit(1.2, "cm")))
+
+  ra = rowAnnotation(category.size = anno_barplot(cat.count$x,
+                                                  add_numbers = TRUE,border = F,
+                                                  #show_annotation_name= F,
+                                                  height = unit(2, "cm")))
+
+  h.map= mat %>%
+    select(-n)%>%
+    mutate(group_louv= paste("DC.",group_louv))%>%
+    pivot_wider(., names_from = group_louv, values_from= prop)%>%
+    column_to_rownames( "group_cat")%>%
+    Heatmap(., cluster_rows = F,
+            cluster_columns = F,
+            col= col_fun,
+            top_annotation = ha,
+            right_annotation = ra,
+            show_heatmap_legend = T,
+            name= "%", row_names_side = "left"
+    )
+  h.map
+
+  return(list(p.props= p.props,
+              p.abs= p.abs,
+              h.map= h.map,
+              fullnet = net
+  ))
 }
 
 

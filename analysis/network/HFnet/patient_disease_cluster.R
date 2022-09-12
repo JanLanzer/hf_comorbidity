@@ -23,7 +23,7 @@ library(ComplexHeatmap)
 dd.net= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/networks/comorbidity/hfnet.rds")
 data = readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/ICD10_labeled_phe.rds")
 pids.list= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/cohort_pids/hf_types_pids.rds")
-link.data= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/networks/comorbidity/link_data.rds")
+link.data= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/networks/comorbidity/link_data2.rds")
 pids= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/cohort_pids/pids_endpoints.rds")
 c.info= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/full_clinic_info.rds")%>%
   distinct(patient_id, sex)%>% filter(sex != "u")%>% mutate(sex= ifelse(sex=="m", "male", ifelse(sex=="f", "female", sex)))
@@ -39,7 +39,7 @@ pids.interesting= list("hfpef"= pids.list$hfpef,
 
 pids.interesting= c(pids.interesting, pids)
 
-node_df= as_data_frame(dd.net, "vertices")
+node_df=igraph::as_data_frame(dd.net, "vertices")
 diseasecluster= split(node_df$name, node_df$group_louv)
 
 
@@ -255,7 +255,7 @@ dev.off()
 
 # scale patient-wise jaccards
 
-jacs.hf= cbind(jaccs.res$hfpef, jaccs.res$hfref)
+jacs.hf= cbind(jaccs.res$hfpef, jaccs.res$hfref, jaccs.res$hfmref)
 jacs.hf[1:10, 1:10]
 
 jacs.s= apply(jacs.hf, 1, scale)
@@ -276,15 +276,22 @@ h.scaled_jac= Heatmap(jacs.s, show_row_names = F,#top_annotation = ha,
 
 p.box= jacs.s %>%as.data.frame() %>% rownames_to_column("pid")%>%
   as_tibble() %>%
-  mutate(pid= ifelse(pid %in% pids.list$hfpef,"hfpef", "hfref"))%>%
+  mutate(pid= ifelse(pid %in% pids.list$hfpef,"hfpef",
+                     ifelse(pid %in% pids.list$hfref,"hfref","hfmref")
+                     )
+         )%>%
   pivot_longer(-pid, names_to= "cluster", values_to= "scaled_jacc")
-
+unique(p.box$pid)
 p.box%>%
   ggplot(., aes(x= cluster, y= scaled_jacc, fill = pid))+
   geom_boxplot()
 
 hfpef= colMeans(jacs.s[colnames(jaccs.res$hfpef),])
 hfref= colMeans(jacs.s[colnames(jaccs.res$hfref),])
+
+hfpef= apply(jacs.s[colnames(jaccs.res$hfpef),], 2, median)
+hfref= apply(jacs.s[colnames(jaccs.res$hfref),], 2, median)
+
 
 hfpef= apply(jacs.s[colnames(wsum.res$hfpef),], 2, median)
 hfref= apply(jacs.s[colnames(wsum.res$hfref),], 2, median)
@@ -315,4 +322,68 @@ p.vals= map(seq(1:10), function(x){
 })
 names(p.vals)= names(diseasecluster)
 
-enframe(p.vals)%>% mutate(value = unlist(value))%>% mutate(logp= -log10(value), sig = (value<0.1))
+mat2= enframe(p.vals)%>%
+  mutate(value = unlist(value))%>%
+  mutate(logp= -log10(value),
+         p.adj= p.adjust(value, method= "BH"),
+         sig = (p.adj<0.05))
+
+
+
+##run anovas when adding hfmref
+
+jacc.df2= jacc.df %>% mutate(hf= ifelse(hfpef=="hfpef", "hfpef",
+                              ifelse(hfref=="hfref", "hfref",
+                                     ifelse(hfmref== "hfmref" , "hfmref", "n"
+                                            )
+                                     )
+                              )
+
+                   )%>%
+  filter(hf !="n")
+
+
+
+
+p.vals= map(seq(1:10), function(x){
+  x1= jacc.df%>% filter(cluster== x, hfref=="hfref")%>% pull(value)
+  x2= jacc.df%>% filter(cluster== x, hfpef=="hfpef")%>% pull(value)
+  x3= jacc.df%>% filter(cluster== x, hfpef=="hfmref")%>% pull(value)
+  anova()
+  wilcox.test(x1, x2)$p.value
+
+})
+
+p.vals= map(seq(1:11), function(x){
+  df= jacc.df2 %>% filter(cluster==x)
+  p=kruskal.test(df$value~ df$hf)$p.value
+  #-log10(p)
+  #pairwise.wilcox.test(df$value, df$hf)$p.value
+})
+
+p.val.df= enframe(unlist(p.vals))%>%
+  mutate(sig= ifelse(value<0.001, "<0.001",
+                     ifelse(value < 0.01, "**",
+                            ifelse(value< 0.05, "<0.05", "ns"))))
+
+
+plot.hmap= plot.df %>% filter(group!= "n") %>% pivot_wider(-median, names_from = cluster, values_from = mean)
+
+plot_h= column_to_rownames(plot.hmap, "group")
+colnames(plot_h) = paste0("DC.", colnames(plot_h))
+
+ha = HeatmapAnnotation(significance =p.val.df$sig,
+                       col= list(significance= c("<0.001"= "darkred", "<0.05"= "red", "ns"= "grey")))
+
+p_jaccard= Heatmap(plot_h[c("hfpef", "hfmref", "hfref"),],
+        cluster_columns = F,
+        cluster_rows = F,
+        top_annotation = ha,
+        rect_gp = gpar(col= "black"),
+        name= "mean jaccard")
+
+pdf("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/figures/supp/comorbidity_net/jacc_patient_net_cluster_sig.pdf",
+    height = 2,
+    width=5)
+p_jaccard
+dev.off()
