@@ -10,7 +10,7 @@ library(qdapTools)
 
 
 # loadings ----------------------------------------------------------------
-source("~/GitHub/RWH_analysis/scripts/HF_classifier/classifier_functions.R")
+source("analysis/utils/utils_classifier_ML.R")
 
 data = readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/data_output/ICD10_labeled_phe.rds")
 
@@ -46,29 +46,30 @@ cross.all = wrap_ml(mod_df, cv_splits )
 #cross.all.dim= get_dim_reductions(df, pids.list)
 
 saveRDS(cross.all, "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/data_output/classifier_output/hfpef_hfref_fit_newID_noicd.rds")
-cross.all= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/data_output/classifier_output/hfpef_hfref_fit_newID.rds")
+cross.all= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/data_output/classifier_output/hfpef_hfref_fit_newID_noicd.rds")
 
-# 2) USE TF IDF SPACE -----------------------------------------------------
-
-#### full
-tfidf.df= table_to_tfidf_frame(data)
-tfidf.df= add_response_variable(tfidf.df)
-tfidf.df= tfidf.df[,colSums(tfidf.df %>% select(-hf))>0]
-
-####
-cv_splits <- vfold_cv(tfidf.df, strata = hf)
-
-tfidf.all = wrap_ml(tfidf.df, cv_splits )
-#tfidf.all.dim= get_dim_reductions(df, pids.list)
-
-saveRDS(tfidf.all, "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/data_output/classifier_output/hfpef_hfref_fit_tfidf_newID.rds")
-tfidf.all= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/data_output/classifier_output/hfpef_hfref_fit_tfidf_newID.rds")
+# # 2) USE TF IDF SPACE -----------------------------------------------------
+#
+# #### full
+#  tfidf.df= table_to_tfidf_frame(data)
+#  tfidf.df= add_response_variable(tfidf.df)
+#  tfidf.df= tfidf.df[,colSums(tfidf.df %>% select(-hf))>0]
+# #
+# # ####
+# cv_splits <- vfold_cv(tfidf.df, strata = hf)
+# res_lr= do.elasticnet(tfidf.df, cv_splits)
+#
+#  tfidf.all = wrap_ml(tfidf.df, cv_splits )
+# tfidf.all.dim= get_dim_reductions(df, pids.list)
+# #
+# saveRDS(tfidf.all, "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/data_output/classifier_output/hfpef_hfref_fit_tfidf_newID.rds")
+# tfidf.all= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/data_output/classifier_output/hfpef_hfref_fit_tfidf_newID.rds")
 
 # 4) plot models -------------------------------------------------------------
 
 ## 1) compare different feature spaces for best model performance:
 all_res= list(cross= cross.all)#,
-              tfidf= tfidf.all)
+
               #time= time.all)
 
 models= c("rf", "lr")
@@ -82,7 +83,7 @@ auc_res= sapply(names(all_res), function(x){
 })
 
 cross.all$rf
-tfidf.all$rf$best_mods
+
 
 p.compare.feat = as.data.frame(auc_res) %>% mutate(model= models,
                                                    model= factor(model, levels= c("rf", "lr"))) %>%  pivot_longer(-model)%>%
@@ -142,9 +143,9 @@ lr_full$variables = lr_full$variables%>%
 saveRDS(lr_full, "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/data_output/classifier_output/full_fit_lr_cross.rds")
 lr_full = readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/data_output/classifier_output/full_fit_lr_cross.rds")
 
-
-lr_full$fit$trained
+lr_full$fit$fit$fit$fit$df
 lr_full$roc_plot
+
 rf_full_cross$variables
 rf_full_cross$conf.matrix
 

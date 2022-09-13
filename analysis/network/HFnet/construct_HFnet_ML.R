@@ -47,7 +47,7 @@ HF_allcause= c("I11.0", "I13.0", "I13.2", "I25.5", "I42.0", "I42.5", "I42.8", "I
 #get all pids
 pids= unlist(pids.list$hf_all)
 #pids= unlist(pids.list[2:4])
-pids= unlist(c(pids.list$hfref,pids.list$hfpef))
+pids= unlist(c(pids.list$hfref,pids.list$hfpef, pids.list$hfmref))
 #remove process data
 data= data%>% filter(!startsWith(entry_value, "Z"))
 
@@ -62,7 +62,7 @@ phecode.frequency=
 
 # at least 10 patients with that PheCode
 
-
+hist(phecode.frequency$rel_freq, breaks= 100)
 phecodes= phecode.frequency%>%
   filter(rel_freq>0.01)%>%
   pull(PheCode2)

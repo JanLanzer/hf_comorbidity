@@ -350,16 +350,9 @@ get_net_link= function(links.sub, pids, col.weight= "corr.phi",col.weight.cutoff
 
 }
 
-create_edge_table_for_cohorts= function(pid.list, data, topn_disease, ...){
+create_edge_table_for_cohorts= function(pid.list, data, topn_disease,phecodes){
 
   .links = map(pid.list, function(pids){
-
-    phecodes= disease_frequencies(pids, data %>% filter(!icd4 %in% HF_allcause | icd3 != "I50"), "PheCode") %>%
-      arrange(desc(rel_freq)) %>%
-      top_n(topn_disease) %>%
-      mutate(PheCode2 = as.character(PheCode)) %>%
-      filter(!PheCode2 %in% c("428.1", "428.2")) %>% #remove HF node.
-      pull(PheCode2)
 
     .links= create.links(pids= pids,
                          phecodes = phecodes,

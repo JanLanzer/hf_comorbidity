@@ -38,7 +38,10 @@ gwas.pasc.ref2= read_tsv("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/dat
 
 gg= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/output/HF_gene_ranks.rds")
 
-
+## comorbidity gwas:
+gwas.bmi= read_tsv("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/HF_subtype_gwas/BMI_snps_p.sum.genescores.txt")
+gwas.nicm= read_tsv("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/HF_subtype_gwas/NICM_snps_p.sum.genescores.txt")
+gwas.dm= read_tsv("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/HF_subtype_gwas/T2D_EUR_snps_p.sum.genescores.txt")
 ##### first mapping (not pascal, but minimal p)
 
 gwas.hfpef= as_tibble(gwas3) %>% arrange(Pvalue)
@@ -58,8 +61,8 @@ gwas.hfref2 = get_min_p(gwas.hfref)%>% rename(gene_symbol = V8)
 
 
 ## network prediciton gene sets
-gc.hfpef= gg %>% arrange(desc(hfpef.prio)) %>% slice(1:100) %>% pull(name)
-gc.hfref= gg %>% arrange(desc(hfref.prio)) %>% slice(1:100) %>% pull(name)
+gc.hfpef= gg %>% arrange(desc(hfpef.prio)) %>% slice(1:200) %>% pull(name)
+gc.hfref= gg %>% arrange(desc(hfref.prio)) %>% slice(1:200) %>% pull(name)
 
 gsets= list("hfpef"= gc.hfpef,
             "hfref"= gc.hfref)
@@ -108,11 +111,12 @@ ref.res= perform_fgsea(gwas.ref, "hfref",gsets = gsets, nperm = 1000) %>% mutate
 gwas.pef= gwas.pasc.pef2%>% mutate(logp= -log10(pvalue))
 gwas.ref= gwas.pasc.ref2%>% mutate(logp= -log10(pvalue))
 pef.res= perform_fgsea(gwas.pef, "hfpef", gsets = gsets) %>% mutate(gwas= "hfpef")
-ref.res= perform_fgsea(gwas.ref, "hfref",gsets = gsets, nperm = 1000) %>% mutate(gwas= "hfref")
+ref.res= perform_fgsea(gwas.ref, "hfref",gsets = gsets, nperm = 10000) %>% mutate(gwas= "hfref")
 
-
+pef.res$leadingEdge
+ref.res$leadingEdge
 # test gene cut offs ------------------------------------------------------
-test_cutoffs= function(sqc= seq(10,500, 50),
+test_cutoffs= function(sqc= seq(25,500, 25),
                        gwas.hfpef,
                        gwas.hfref,
                        gg){
@@ -136,21 +140,27 @@ test_cutoffs= function(sqc= seq(10,500, 50),
     facet_grid(rows= vars(gwas))+
     geom_point()+
     geom_path()+
-    geom_hline(yintercept = -log10(0.05))
+    geom_hline(yintercept = -log10(0.05))+
+    geom_hline(yintercept = -log10(0.1))+
+    geom_hline(yintercept = -log10(0.2))
 
 
 }
 
 
-test_cutoffs(gwas.hfpef =gwas.pasc.pef2%>% mutate(logp= -log10(pvalue)),
+p1= test_cutoffs(gwas.hfpef =gwas.pasc.pef2%>% mutate(logp= -log10(pvalue)),
              gwas.hfref = gwas.pasc.ref2%>% mutate(logp= -log10(pvalue)),
              gg= gg)
 
 
-test_cutoffs(gwas.hfpef =gwas.pasc.pef%>% mutate(logp= -log10(pvalue)),
-             gwas.hfref = gwas.pasc.ref%>% mutate(logp= -log10(pvalue)),
+p2= test_cutoffs(gwas.hfpef =gwas.bmi%>% mutate(logp= -log10(pvalue)),
+             gwas.hfref = gwas.dm%>% mutate(logp= -log10(pvalue)),
              gg= gg)
 
+p3= test_cutoffs(gwas.hfpef =gwas.nicm%>% mutate(logp= -log10(pvalue)),
+                 gwas.hfref = gwas.dm%>% mutate(logp= -log10(pvalue)),
+                 gg= gg)
+p3
 g.ranks %>%
   ggplot(., aes(x= reorder(name, -hfpef.prio), y= hfpef.prio))+
   geom_point()+

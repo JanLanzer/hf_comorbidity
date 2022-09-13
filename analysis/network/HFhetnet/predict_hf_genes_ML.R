@@ -18,9 +18,16 @@
 ## ---------------------------
 library(RandomWalkRestartMH)
 library(tidyverse)
+library(ComplexHeatmap)
+
 source("analysis/utils/utils_hetnet.R")
 
 edge.list= readRDS( "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/output/multilayer_edge_list.rds")
+
+ML.class= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/output/HFpEF_classifier_features.rds")
+
+
+
 
 ppi_net_multiplex= create.multiplex(edge.list$gene)
 
@@ -36,38 +43,33 @@ PPIHetTranMatrix <- compute.transition.matrix(PPI_Disease_Net)
 
 
 # get gene ranking for hfpef and hfref nodes ------------------------------
+ML.class= ML.class %>% mutate(hf = ifelse(importance>0 & estimate< -0.2, "hfpef",
+                                          ifelse(importance>0 & estimate>0.2, "hfref", "ns")
+                                          )
+                              )
 
-main_disease= c("585.3", "401.1", "440", "272.13", "250.2", "296.22", "496",
-                "280.1","327.3","411.4")
+seed.hfpef= ML.class %>% filter(hf=="hfpef")%>% pull(PheCode)
+seed.hfref= ML.class %>% filter(hf=="hfref")%>% pull(PheCode)
+
+Phe_dic%>% filter(PheCode %in% seed.hfref)
+
+# main_disease= c("585.3", "401.1", "440", "272.13", "250.2", "296.22", "496",
+#                 "280.1","327.3","411.4")
 
 g.hfpef <-
   Random.Walk.Restart.MultiplexHet(x= PPIHetTranMatrix,
                                    MultiplexHet_Object = PPI_Disease_Net,
                                    Multiplex1_Seeds= c(),
-                                   Multiplex2_Seeds = main_disease,
+                                   Multiplex2_Seeds = seed.hfpef,
                                    r=0.8)
-
-g.hfpef <-
-  Random.Walk.Restart.MultiplexHet(x= PPIHetTranMatrix,
-                                   MultiplexHet_Object = PPI_Disease_Net,
-                                   Multiplex1_Seeds= c(),
-                                   Multiplex2_Seeds = "hfpef",
-                                   r=0.8)
-
 
 g.hfref <-
   Random.Walk.Restart.MultiplexHet(x= PPIHetTranMatrix,
                                    MultiplexHet_Object = PPI_Disease_Net,
                                    Multiplex1_Seeds= c(),
-                                   Multiplex2_Seeds = "hfref",
+                                   Multiplex2_Seeds = seed.hfref,
                                    r=0.8)
 
-g.hfmref <-
-  Random.Walk.Restart.MultiplexHet(x= PPIHetTranMatrix,
-                                   MultiplexHet_Object = PPI_Disease_Net,
-                                   Multiplex1_Seeds= c(),
-                                   Multiplex2_Seeds = "hfmref",
-                                   r=0.8)
 
 
 g.hfpef= g.hfpef$RWRMH_Multiplex1 %>%
@@ -78,20 +80,30 @@ g.hfref= g.hfref$RWRMH_Multiplex1 %>%
   rename(value= Score,
          name= NodeNames)%>% as_tibble()
 
-
-g.hfmref= g.hfmref$RWRMH_Multiplex1 %>%
-  rename(value= Score,
-         name= NodeNames)%>% as_tibble()
-
-
 # plots -------------------------------------------------------------------
 
 sets= load_validation_genes(disgenet_value= 0.29)
 sets$set_phe= NULL
 sets$set_reheat= NULL
-
+sets$set_reheat_up= sets$set_reheat_up[1:250]
 val.set= unique(unlist(sets))
 length(unique(unlist(sets)))
+
+pef= sapply(sets, function(x){
+  res = validate_results2(x, g.hfpef)
+  c("PR_AUC"= res$pr$auc.integral,
+    "AUROC" =res$roc$auc)
+})
+ref= sapply(sets, function(x){
+  res = validate_results2(x, g.hfref)
+  c("PR_AUC"= res$pr$auc.integral,
+    "AUROC" =res$roc$auc)
+})
+
+ref["HF"]= rep("HFrEF",2)
+
+
+rbind(pef, ref)%>% Heatmap()
 
 # PLOT RANKS --------------------------------------------------------------
 
@@ -111,14 +123,13 @@ g.ranks= full_join(g.pef, g.ref, by= "name") %>%
 
 saveRDS(g.ranks, file = "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/output/HF_gene_ranks.rds")
 g.ranks= readRDS( file = "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/output/HF_gene_ranks.rds")
+
 saveRDS(list(g.hfpef, g.hfref), file = "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/output/HF_gene_ranks2.rds")
 g.list= readRDS( file = "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/output/HF_gene_ranks2.rds")
 
 g.ranks %>% write.csv(., file = "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/output/predicted_HF_genes.csv")
 
 
-
-g.list
 top_n = 50
 
 g.pef.top= g.ranks %>% arrange(desc(hfpef.prio))%>% slice(1:top_n) %>% pull(name)
@@ -133,7 +144,7 @@ library(ggrepel)
 p.ef = ggplot(g.pef, aes(x= rank,y= value))+
   geom_point()+
   theme_classic()+
-  geom_vline(xintercept = 500, col= "darkgrey")+
+  geom_vline(xintercept = 250, col= "darkgrey")+
   labs(x= "gene ranking hfpef",
        y= "RW probability")+
   ggtitle("HFpEF")
