@@ -20,37 +20,92 @@
 
 
 library(tidyverse)
-directory= "T:/fsa04/MED2-HF-Comorbidities/data/RWH_March2020"
+library(lubridate)
+library(ICD10gm)
+
+directory= "T:/fsa04/MED2-HF-Comorbidities/data/RWH_September2022/raw/"
 
 #load phewas maps
 
 # Standard WHO version, used here
-phewas2= read_csv(file = paste0(directory,"data_Jan/phecode_icd10.csv")) %>% filter(!is.na(PheCode))
+phewas2= read_csv(file = "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/databases/PheWas/phecode_icd10.csv") %>% filter(!is.na(PheCode))
 
 # Load Phecode definitions:
-Phecode_definitions= read.csv(file.path(directory, "data_Jan/phecode_definitions1.2.csv"),
+Phecode_definitions= read.csv("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/databases/PheWas/phecode_definitions1.2.csv",
                               colClasses = rep("character", 7)) %>% as_tibble
 
+
+data= read.csv(paste0(directory,"levinson_comorbidities_pids_2022-10-06.csv"), sep = ";")
 # Load ICD10-dataset
 icd10_labeled = readRDS("T:/fsa04/MED2-HF-Comorbidities/data/RWH_March2020/output_Jan/ICD10_labeled.rds")
 
+#old df
+icd10_labeled = readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/ICD10_labeled.rds")
 
-#Load additional data for disease frequency calculation
-#patient of interest
-patients = readRDS(file.path(directory, "output_Jan/time_range_patientIDs.rds"))
-#final_labeled data:
-icd10 = readRDS("T:/fsa04/MED2-HF-Comorbidities/data/RWH_March2020/output_Jan/ICD10_labeled_phe.rds") %>%
-  filter(pid %in% patients)
-# calculate disease frequencies based on icd10 table, patient id, and ontology
-source("~/GitHub/RWH_analysis/scripts/utils.R")
+table(unique(data$pid) %in% unique(icd10_labeled$pid))
+unique(data$pid)[!unique(data$pid) %in% unique(icd10_labeled$pid)]%>% write.csv("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/missing_icd10data.csv")
 
-freqs = disease_frequencies(patients,icd10, feature = "entry_value") %>%
-  select(-rel_freq) #%>%
-  mutate(PheCode = as.character(PheCode))
+
+data= data %>% as_tibble() %>% arrange(pid)%>%
+  separate_rows(diags, sep = ", ")
+
+
+# add ICD10 labels --------------------------------------------------------
+#1) calculate age at diagnosis
+icd10_mod = data  %>%
+  mutate(birthday= lubridate::as_date(birthday),
+         entry_date = lubridate::as_date(diag_date_min ),
+         ICDint = lubridate::interval(birthday, entry_date),
+         age.at.icd = ICDint/dyears(1)) %>%
+  select(-ICDint,-birthday)
+
+icd10_mod
+
+#explore range
+range(icd10_mod$age.at.icd, na.rm = T)
+#filter
+icd10_mod= icd10_mod %>% filter(age.at.icd < 120) #2151889 has age 163
+
+
+#2) add icd3 codes and labels
+# create a 3-digit ICD10- version ( can be used to simplify visualization)
+icd3 = lapply(data$diags, function(x){
+  strsplit(x,"\\.")[[1]][1]
+})
+
+icd10_mod = mutate(data, icd3 = unlist(icd3))
+
+#3) use library to get ICD labels (ICD3 and ICD)
+ICD = icd_meta_codes %>%
+  select(icd_normcode, label, label_icd3) %>%
+  rename(entry_value = icd_normcode) %>%
+  as_tibble %>%
+  drop_na()%>%
+  distinct(entry_value, label, label_icd3)
+
+# there is a problem with the icd_meta_codes data. Some codes recieve double labeling which is redundant
+duplicat = ICD[ICD$entry_value %>% duplicated,]%>% arrange(entry_value) %>% select(entry_value)
+ICD2 = ICD %>% filter(entry_value %in% duplicat$entry_value) %>% arrange(entry_value) # the double labeled rows are captured
+
+ICD2 = ICD2[seq(1,length(ICD2$entry_value), 2),] # every second row is deleted
+
+ICD3= ICD %>% filter(!entry_value %in% duplicat$entry_value) %>% arrange(entry_value) # ICD3 contains only those codes without duplicates
+
+ICD= rbind(ICD3, ICD2) %>% arrange(entry_value) #merging both results in a complete and unique list!
+
+
+# add labels
+icd10_mod = icd10_mod %>%
+  left_join(ICD%>% rename(diags= "entry_value"), by= "diags")
+
+# save modified icd10 table
+
+saveRDS(icd10_mod, file= "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/ICD10_labeled_2022.rds")
+
 
 
 # disease mapping of ICD10 codes to disease concepts ----------------------
-
+icd10_labeled = icd10_mod%>% rename(entry_value= diags)
 # Disease Concept = PheWas codes
 
 # explore how many icd10 codes are in the phewas bank

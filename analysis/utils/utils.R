@@ -65,15 +65,24 @@ get_summary_table= function(
 
 
   #add hfpef label
-  if(!exists("pids.list")){
-    pids.list = pids.list= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/data_output/pidslist_v2021.rds")
+  # if(!exists("pids.list")){
+  #   pids.list = pids.list= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/data_output/pidslist_v2021.rds")
+  # }
+
+
+
+  if(!exists("pid.df")){
+    pid.df= read.csv( "T:/fsa04/MED2-HF-Comorbidities/data/RWH_September2022/raw/levinson_comorbidities_pids_2022-10-06.csv", sep = ";") %>%
+      as_tibble
   }
 
-  if(!exists("hf")){
-    hf = read.csv("T:fsa04/MED2-HF-Comorbidities/data/RWH_March2020/levinson_comorbidities_in_hf_patients_2020-03-25.csv",
-                  sep = ";",
-                  na.strings=c("","NA")) %>% as_tibble
-  }
+  #add age calculation
+  pid.df= pid.df  %>%
+    mutate(birthday= lubridate::as_date(birthday),
+           entry_date = lubridate::as_date(diag_date_min ),
+           ICDint = lubridate::interval(birthday, entry_date),
+           age.at.icd = ICDint/dyears(1)) %>%
+    select(-ICDint)
 
   df= df %>%
     mutate(hf= ifelse(pid %in% pids.list$hfpef,"hfpef",

@@ -42,7 +42,7 @@ phedic= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_coho
 
 phecodes= readRDS( "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/top300_disease.rds")
 
-pids.list= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/cohort_pids/hf_types_pids.rds")
+pids.list= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/cohort_pids/hf_types_pids2022.rds")
 map(pids.list,length)
 hf = read.csv("T:fsa04/MED2-HF-Comorbidities/data/RWH_March2020/levinson_comorbidities_in_hf_patients_2020-03-25.csv",
               sep = ";",
@@ -359,9 +359,9 @@ hftype= lapply(unique(df$hf.type), function(x){
 
 
 cat.df= rbind(cat.df,
-      c("sig",hftype[[1]]$hfref[1], "HFrEF v. HFpEF" ),
-      c("sig",hftype[[1]]$hfmref[1], "HFmrEF v. HFpEF" ),
-      c("sig",hftype[[2]]$hfmref[1], "HFmrEF v. HFrEF" )
+      c("sig",hftype[[1]]$hfpef[1], "HFrEF v. HFpEF" ),
+      c("sig",hftype[[1]]$hfmref[1], "HFmrEF v. HFrEF" ),
+      c("sig",hftype[[2]]$hfmref[1], "HFmrEF v. HFpEF" )
       )%>%
   mutate(s = as.numeric(s))
 
@@ -430,7 +430,9 @@ cowplot::plot_grid(p.cat, p.cont, align = "h")
 df.explained_V= rbind(do.call(rbind, tested.vars.cont) , cat.df)%>%
   mutate(var.type= ifelse(var %in% cat.vars, "categorical",
                           ifelse(grepl("HF", var), "HF subtypes", "continuous")))%>%
-  filter(sig=="sig") #%>%
+  filter(sig=="sig")
+df.explained_V
+  sum.t%>%
   dplyr::rename("Sex"= sex,
                 "Age (y)" = age.at.mean,
                 BMI = median.BMI,
@@ -468,7 +470,7 @@ p.explained_V
 
 
 pdf("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/figures/main/explained_V.pdf",
-    height = 4, width= 5.5)
+    height = 4, width= 5)
 p.explained_V
 
 dev.off()
@@ -477,7 +479,9 @@ dev.off()
 #DiM red---------------------------------------------------------
 
 library(ggExtra)
-source("~/GitHub/RWH_analysis/scripts/HF_classifier/classifier_functions.R")
+
+source("~/GitHub/hf_comorbidity_genes/analysis/utils/utils_classifier_ML.R")
+
 set.seed(2)
 
 
@@ -501,7 +505,7 @@ umap.plot = as_tibble(cbind(as_tibble(umap_res$layout), pid=  rownames(df))) %>%
          PCI= ifelse(pid %in% endpoint$pci, "yes", "no"))
 
 p.umap.hf =ggplot(umap.plot, aes(x= V1, y= V2, color = hf))+
-  geom_point(alpha= 0.7, size= 1)+
+  geom_point(alpha= 0.7, size= .5)+
   #scale_color_manual(values=c( col.set[2], "#7FC6A4", col.set[3]))+
   scale_color_manual(values=c( col.set[-1]))+
   labs(color="HF cohort",

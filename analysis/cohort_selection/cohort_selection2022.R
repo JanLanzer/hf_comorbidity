@@ -37,32 +37,48 @@ directory= "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/"
 # full data frame:
 data= readRDS(file = "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/ICD10_labeled_phe.rds")
 
-hf = read.csv("T:/fsa04/MED2-HF-Comorbidities/data/RWH_March2020/levinson_comorbidities_in_hf_patients_2020-03-25.csv",
-              sep = ";",
-              na.strings=c("","NA")) %>% as_tibble
 
-# full cohort
-patients =readRDS(file = "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/cohort_pids/time_range_all.rds")
+#new cohort 2022
+pid.df= read.csv( "T:/fsa04/MED2-HF-Comorbidities/data/RWH_September2022/raw/levinson_comorbidities_pids_2022-10-06.csv", sep = ";")
+#add age calculation
+pid.df= pid.df  %>%
+  mutate(birthday= lubridate::as_date(birthday),
+         entry_date = lubridate::as_date(diag_date_min ),
+         ICDint = lubridate::interval(birthday, entry_date),
+         age.at.icd = ICDint/dyears(1)) %>%
+  select(-ICDint)
+
+range(pid.df$age.at.icd, na.rm= T)
+
+pids.age= pid.df %>% filter(age.at.icd<110 & age.at.icd>39)%>% pull(pid)
 
 #full pheno data
+
 full_df= readRDS( file = "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/full_clinic_info.rds")
-pharma= readRDS(file = "T:/fsa04/MED2-HF-Comorbidities/data/processed_data/Medication_df.rds")
+pharma= readRDS(file = "T:/fsa04/MED2-HF-Comorbidities/data/processed_data/sept2022/Medication_df.rds")
+echo_df= readRDS( "T:/fsa04/MED2-HF-Comorbidities/data/processed_data/sept2022/echo_measures_most_extreme.rds")
+EF= readRDS(file = "T:/fsa04/MED2-HF-Comorbidities/data/processed_data/sept2022/EF_df.rds")
+NY= readRDS(file = "T:/fsa04/MED2-HF-Comorbidities/data/processed_data/sept2022/NYHA.rds")
+bnp= readRDS(file = "T:/fsa04/MED2-HF-Comorbidities/data/processed_data/sept2022/labs_bnp.rds")
 
+bnp = bnp %>% group_by(patient_id) %>%
+  mutate(max.bnp= max(entry_value),
+         med.bnp= median(entry_value))
 
+EF= EF%>% group_by(patient_id) %>%
+  mutate(min.ef= max(ef),
+         med.ef= median(ef))
 
-
+NY= NY %>% group_by(patient_id) %>%
+  mutate(max.nyha= max(entry_value))
 
 # get pids for different cohorts  ---------------------------------------------------
 ### create different cohorts for different features/filters and merge them at a final level
 
 ## 1) filter for ICD 10
 # get pids for everybody that has HF
-HF_allcause= c("I11.0", "I13.0", "I13.2", "I25.5", "I42.0","I42.3", "I42.6", "I42.7","I50.0", "I50.1", "I50.9")
 
-pids.HF = data %>%
-  #filter(pid %in% patients) %>%
-  filter(icd3 %in% c("I50") | icd4 %in% HF_allcause) %>%
-  #filter(icd3 %in% c("I50") | icd4 %in% c("I11.0","I13.0", "I13.2","I25.5", "I42.")) %>% ### RE EVALUATE IF I25 should be included!! (wihtout hf.pids. shrink to 9.500)
+pids.HF = pid.df %>%
   distinct(pid) %>%
   pull(pid)
 
@@ -89,33 +105,37 @@ pids.I42 = data %>%
 
 
 # visualize
+unique(data$pid)
 ggVennDiagram(list("all_cause"= pids.HF,
-                   "CM"= pids.I42))
+                   "CM"= pids.I42,
+                   "all_data" = unique(data$pid)))
+
+
 # 443 patients in our cohort received an I42 diagnossis that is unwanted (example HCM)
 
 # we remove those patients:
 pids.HF.noCM= pids.HF[!pids.HF %in% pids.I42]
 
 ## 2) filter for BNP
-pids.maxbnp = full_df %>%
+pids.maxbnp = bnp %>%
   group_by(patient_id) %>%
-  filter(max.bnp>120)%>%
+  filter(med.bnp>120)%>%
   distinct(patient_id) %>%
   pull(patient_id) %>% as.integer()
 
 ### 3) filter for EF
-pids.pEF = full_df %>% filter(ef.min >= 50) %>% distinct(patient_id) %>%pull(patient_id)
-pids.rEF = full_df %>% filter(ef.min <= 40) %>% distinct(patient_id) %>%pull(patient_id)
-pids.mrEF = full_df %>% filter(ef.min >40 & ef.min <50) %>% distinct(patient_id) %>%pull(patient_id)
+pids.pEF = EF %>% filter(min.ef >= 50) %>% distinct(patient_id) %>%pull(patient_id)
+pids.rEF = EF %>% filter(min.ef <= 40) %>% distinct(patient_id) %>%pull(patient_id)
+pids.mrEF = EF %>% filter(min.ef >40 & min.ef <50) %>% distinct(patient_id) %>%pull(patient_id)
 
 ### 4) filter for NYHA
-pids.nyha= full_df %>% filter(!is.na(nyha.max)) %>%distinct(patient_id)%>%  pull(patient_id)
+pids.nyha= NY %>% filter(!is.na(max.nyha)) %>%distinct(patient_id)%>%  pull(patient_id)
 
 ### Other echo data
-pids.LVDD= full_df %>% filter(edd.max>55) %>% pull(patient_id)
-pids.LvEE= full_df%>% filter(ee.max >15) %>%pull(patient_id)
-pids.LVEA.min= full_df %>% filter(ea.min<1 )%>% pull(patient_id)
-pids.LVEA.max = full_df %>% filter(ea.max>3 )%>% pull(patient_id)
+pids.LVDD= echo_df %>% filter(edd.max>55) %>% pull(patient_id)
+pids.LvEE= echo_df%>% filter(ee.max >15) %>%pull(patient_id)
+pids.LVEA.min= echo_df %>% filter(ea.min<1 )%>% pull(patient_id)
+pids.LVEA.max = echo_df %>% filter(ea.max>3 )%>% pull(patient_id)
 
 pids.icd10 = as.integer(pids.HF.noCM)
 pids.rEF= as.integer(pids.rEF)
@@ -125,6 +145,7 @@ pids.maxbnp= as.integer(pids.maxbnp)
 pids.LvEE= as.integer(pids.LvEE)
 
 #calculate number of hf diagnosis per patient ( cannot be the same day)
+HF_allcause= c("I11.0", "I13.0", "I13.2", "I25.5", "I42.0","I42.3", "I42.6", "I42.7","I50.0", "I50.1", "I50.9")
 data_count_HF= data %>%
   filter(pid %in% pids.icd10) %>%
   distinct(pid, entry_date, entry_value, icd3, icd4) %>%
@@ -147,6 +168,8 @@ pids.loopd= pharma %>% filter(therapie.medikament %in% loop_diuretic) %>% distin
 
 
 # hf= ICD (mandatory)+ either (ef, ee, or bnp) or 3x codes or pharma
+pid.htx =readRDS(file = "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/cohort_pids/pids_endpoints.rds")
+
 pid.HF.multi= data %>%
   distinct(pid) %>%
   filter(pid %in% pids.icd10,
@@ -155,7 +178,7 @@ pid.HF.multi= data %>%
          pid %in% pids.maxbnp | pid %in% pids.nyha | pid %in% pids.LvEE | pid %in% c(pids.rEF,pids.mrEF) | pid %in% pid.icd10.2x | pid %in% pids.loopd)%>%
   pull(pid)
 
-ggVennDiagram(list("loopd"= pids.loopd,
+ggVennDiagram(list("loopd"= as.numeric(pids.loopd),
                    "bnp"= as.numeric(pids.maxbnp),
                    "2x"= as.numeric(pid.icd10.2x),
                    "ee"= as.numeric(pids.LvEE),
@@ -164,7 +187,6 @@ ggVennDiagram(list("loopd"= pids.loopd,
 
 # cohort definitions Jul 2022 --------------------------------------------------
 # remove HTX patients (EF after HTX is wrongfully normal)
-pid.htx =readRDS(file = "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/cohort_pids/pids_endpoints.rds")
 
 pid.HFpEF= intersect(pids.pEF, pid.HF.multi)
 pid.HFpEF= pid.HFpEF[!pid.HFpEF %in% pid.htx$htx]
@@ -182,9 +204,25 @@ hf.list= list("hf_all"= pid.HF.multi,
               "hfmref"= pid.HFmrEF)
 
 map(hf.list, length)
+map(hf.list, function(x) length(intersect( x,unique(data$pid))))
+
+saveRDS(hf.list, "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/cohort_pids/hf_types_pids2022.rds" )
+
+x= data%>% group_by(pid) %>%
+  distinct(pid, PheCode)%>% count()
+x %>% filter(pid %in% hf.list$hfpef)%>% pull(n)%>% hist()
+x %>% filter(pid %in% hf.list$hfref)%>% pull(n)%>% hist
+
+map(hf.list, function(x){
+  df= echo_df %>% filter(patient_id  %in% x)
+  apply(df, 2,function(x) (median(x,na.rm = T)))
+
+})
+
+echo_df
 
 
-saveRDS(hf.list, "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/cohort_pids/hf_types_pids.rds" )
+
 
 # redo the cohort for a the less frequent visit cohort  ---------------------------------------------------
 

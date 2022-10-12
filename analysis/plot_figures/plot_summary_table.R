@@ -24,7 +24,7 @@ library(tidyverse)
 source("analysis/utils/utils.R")
 data = readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/ICD10_labeled_phe.rds")
 
-pids.list= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/cohort_pids/hf_types_pids.rds")
+pids.list= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/cohort_pids/hf_types_pids2022.rds")
 phecodes= readRDS( "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/top300_disease.rds")
 
 map(pids.list, length)
@@ -34,7 +34,7 @@ data.r= data %>% filter(pid %in% c(pids.list$hf_all,pids.list$hfpef, pids.list$h
                 PheCode %in% phecodes)
 
 df= get_summary_table(data.r, pids.list[2:4])
-
+df= get_summary_table(data.r, pids.list[c(2,3)])
 table.df= df %>%
   filter(patient_cohort != "none") %>%
   distinct(pid,

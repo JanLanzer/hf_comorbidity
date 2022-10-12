@@ -40,7 +40,7 @@ rownames(mod_df)
 set.seed(20)
 
 # do a universal cv_split
-cv_splits <- vfold_cv(mod_df, strata = hf)
+cv_splits <- vfold_cv(mod_df, strata = hf, pool = 0.1)
 
 cross.all = wrap_ml(mod_df, cv_splits )
 #cross.all.dim= get_dim_reductions(df, pids.list)
@@ -176,15 +176,25 @@ comp_feat %>% filter(importance<1)
 ggplot(data= comp_feat, aes(x= abs(estimate), y= importance))+
   geom_point()
 library(ggrepel)
-comp_feat = comp_feat %>% mutate(label = ifelse(importance>15 & abs(estimate)>0.1, Phenotype, ""))
+comp_feat = comp_feat %>% mutate(label = ifelse(importance>2 & abs(estimate)>0.1, Phenotype, ""))
 ggplot(data= comp_feat, aes(x= estimate, y= importance, color = category))+
   geom_point()+
   geom_text_repel(aes(label= label, color= category),
-                  box.padding = 2,
-                  max.overlaps = 500,
-                  show.legend = FALSE)+
+                  box.padding = 1,
+                  max.overlaps = 80,
+                  show.legend = FALSE,force = 0.5)+
   #scale_y_log10()+
-  labs(color = "cat")
+  labs(color = "cat")+
+  theme_minimal()
+
+comp_feat%>%
+  mutate(hf= ifelse(estimate<0, "hfpef", "hfref"))%>%
+  filter(abs(estimate)>0.1)%>%
+  ggplot(., aes(x= reorder(Phenotype, abs(estimate)), y= abs(estimate)))+
+  geom_point()+
+  geom_col(width=0.1)+
+  facet_grid(cols= vars(hf), scales = "free_x" )+
+  theme(axis.text.x = element_text(angle= 90, hjust= 1))
 
 hist(comp_feat$estimate, breaks= 50)
 
@@ -198,6 +208,7 @@ ggplot(rf_full_cross$variables%>% mutate(x= "rf"), aes(y= importance,x= x))+
 
 
 saveRDS(comp_feat, "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/output/HFpEF_classifier_features.rds")
+comp_feat= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/output/HFpEF_classifier_features.rds")
 # calculate the top 25% of most importante features
 mod = rf_full_cross$variables
 cut_off= quantile(mod$importance)[4]
