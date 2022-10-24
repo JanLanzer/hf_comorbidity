@@ -30,8 +30,8 @@ library(ggrepel)
 library(igraph)
 library(ComplexHeatmap)
 
-data = readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/ICD10_labeled_phe.rds")
-pids.list= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/cohort_pids/hf_types_pids.rds")
+data = readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/ICD10_labeled_phe2022.rds")
+pids.list= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/cohort_pids/hf_types_pids2022.rds")
 
 map(pids.list, length)
 
@@ -60,17 +60,17 @@ phecode.frequency=
   left_join(Phe_dic)
 
 # at least 10 patients with that PheCode
-
+cutoff= 50
 
 phecodes= phecode.frequency%>%
-  filter(rel_freq>0.01)%>%
+  filter(freq>cutoff)%>%
   pull(PheCode2)
 
 p.phe.counts=
   ggplot(phecode.frequency, aes(x= reorder(PheCode, -freq)  , y= log10(freq)))+
   geom_point()+
   theme_classic()+
-  geom_hline(yintercept = log10(24), col = "grey", size= 1, type= 2)+
+  geom_hline(yintercept = log10(cutoff), col = "grey", size= 1, type= 2)+
   geom_vline(xintercept = length(phecodes),  col = "grey")+
   theme(axis.text.x = element_blank())+
   labs(x= "PheCodes",
@@ -83,7 +83,7 @@ pdf("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/figures/supp/feature_cut
 p.phe.counts
 dev.off()
 
-saveRDS(phecodes, "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/top300_disease.rds")
+saveRDS(phecodes, "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/topfreq_disease.rds")
 
 
 ## function to add hfref and hfpef as diagnosis codes to the data

@@ -22,10 +22,10 @@ library(gtable)
 library(tidyverse)
 
 source("analysis/utils/utils.R")
-data = readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/ICD10_labeled_phe.rds")
 
+data = readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/ICD10_labeled_phe.rds")
 pids.list= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/cohort_pids/hf_types_pids2022.rds")
-phecodes= readRDS( "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/top300_disease.rds")
+phecodes= readRDS( "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/topfreq_disease.rds")
 
 map(pids.list, length)
 
@@ -35,10 +35,12 @@ data.r= data %>% filter(pid %in% c(pids.list$hf_all,pids.list$hfpef, pids.list$h
 
 df= get_summary_table(data.r, pids.list[2:4])
 df= get_summary_table(data.r, pids.list[c(2,3)])
+length(unique(table.df$pid))
+
 table.df= df %>%
   filter(patient_cohort != "none") %>%
   distinct(pid,
-           #age_at_HF,
+           age.at.icd,
            median.BMI,
            mean.sys,
            mean.dias,
@@ -51,7 +53,7 @@ table.df= df %>%
            defi,
            pci,
            PheCode_count,
-           icd10gm_count,
+           #icd10gm_count,
            charlson_score,
            elixhauser_wscore,
            nyha.max,
@@ -64,20 +66,29 @@ table.df= df %>%
            ef.min,
            median.gfrcg,
            median.hba1c,
-           age.at.mean,
+           #age.at.mean,
            sex)
 
 table.df$patient_cohort= str_replace_all(table.df$patient_cohort, "hfpef", "HFpEF")
 table.df$patient_cohort= str_replace_all(table.df$patient_cohort, "hfref", "HFrEF")
 table.df$patient_cohort= str_replace_all(table.df$patient_cohort, "hfmref", "HFmrEF")
 
+table(table.df$patient_cohort)
+
+table.df %>%
+  saveRDS(., file = "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/patient_metadata_2022.rds")
+
+
+
 gt.tab= table.df %>%
-  select(-pid) %>%
+  #select(-pid) %>%
   #mutate(patient_cohort= ifelse(patient_cohort=="hfpef", "HFpEF", "HFrEF"))%>%
+  #filter(sex.y != "u",
+  #       patient_cohort != "hf_all")%>%
   mutate(patient_cohort= factor(patient_cohort, levels= c("HFrEF", "HFmrEF", "HFpEF")))%>%
   select(patient_cohort,
          sex,
-         age.at.mean,
+         age.at.icd,
          median.BMI,
          mean.sys,
          mean.dias,
@@ -104,7 +115,7 @@ gt.tab= table.df %>%
 
   )%>%
   dplyr::rename(Sex= sex,
-                "Age (y)" = age.at.mean,
+                "Age (y)" = age.at.icd,
                 BMI = median.BMI,
                 #"EF(%)"= ef.min,
                 "Systolic RR (mmHg)"= mean.sys,
@@ -128,7 +139,8 @@ gt.tab= table.df %>%
   modify_header(label ~ "**Variable**") %>%
   modify_spanning_header(c("stat_1", "stat_2", "stat_3") ~ "**HF subtypes**")
 
-gt.tab
+
+table(gt.tab$patient_cohort)
 
 gt::gtsave(as_gt(gt.tab), file ="output/cohor_summary.png")
 
@@ -172,12 +184,13 @@ table.df= df %>%
            age.at.mean,
            sex)
 
+
 gt.tab= table.df %>%
   select(-pid) %>%
   #mutate(patient_cohort= ifelse(patient_cohort=="hfpef", "HFpEF", "HFrEF"))%>%
   select(patient_cohort,
          sex,
-         age.at.mean,
+         age.at.icd,
          median.BMI,
          mean.sys,
          mean.dias,
@@ -193,10 +206,11 @@ gt.tab= table.df %>%
          #charlson_score,
          elixhauser_wscore,
          intu,
-         #htx,
+         htx,
          defi,
          pci,
          ef.min,
+         nyha.max,
          #edd.max,
          #ea.min,
          #ea.max,
@@ -204,7 +218,7 @@ gt.tab= table.df %>%
 
   )%>%
   dplyr::rename(Sex= sex,
-                Age = age.at.mean,
+                Age = age.at.icd,
                 BMI= median.BMI,
                 "EF(%)"= ef.min,
                 "Systolic RR"= mean.sys,
@@ -218,7 +232,8 @@ gt.tab= table.df %>%
                 Elixhauser= elixhauser_wscore,
                 #HTX= htx,
                 PCI= pci,
-                ICD_implant= defi
+                ICD_implant= defi,
+                "NYHA"= nyha.max,
   )  %>%
   tbl_summary(by = patient_cohort) %>%
   add_p()%>%
@@ -230,14 +245,6 @@ gt.tab= table.df %>%
 
 gt.tab
 
+gt::gtsave(data= gt.tab, filename= ".html", path= "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/figures/main/cohorttable.html")
 
 
-# plot age ----------------------------------------------------------------
-
-colnames(df)
-df%>% distinct(pid, hf, age.at.mean)%>%
-ggplot(., aes(x=hf, y= age.at.mean   ))+
-  geom_boxplot()+
-  geom_jitter()
-
-df %>% distinct(pid, age.at.mean, hf)%>% filter(age.at.mean<45)%>% count(hf)

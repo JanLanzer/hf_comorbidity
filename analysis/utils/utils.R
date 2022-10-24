@@ -37,7 +37,12 @@ disease_frequencies = function(pids, icd, feature= "PheCode"){
 
 cols.nice= c("#264653","#2a9d8f","#e9c46a","#f4a261","#e76f51")
 
-
+library(RColorBrewer)
+qual_col_pals = brewer.pal.info[brewer.pal.info$category == 'qual',]
+col_vector = unlist(mapply(brewer.pal, qual_col_pals$maxcolors, rownames(qual_col_pals)))
+col_vector= col_vector[-4]
+hfpef_cols= c("#EF946C", "#785474")
+up_dn_cols= c("#0353A4", "#C41E3D")
 #function to characterize a given patient cohort:
 
 
@@ -57,19 +62,20 @@ get_summary_table= function(
   # filter for pids of interest:
   df= data# %>% dplyr::filter(pid %in% pids)
 
+  ## add cohort category
   df$patient_cohort= "none"
+
   for(i in names(pids.list)){
     df = df %>% mutate(patient_cohort= ifelse(pid %in% pids.list[[i]],
                                               i, patient_cohort))
   }
 
+  df = df %>% filter(pid != "none")
 
   #add hfpef label
   # if(!exists("pids.list")){
   #   pids.list = pids.list= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/data_output/pidslist_v2021.rds")
   # }
-
-
 
   if(!exists("pid.df")){
     pid.df= read.csv( "T:/fsa04/MED2-HF-Comorbidities/data/RWH_September2022/raw/levinson_comorbidities_pids_2022-10-06.csv", sep = ";") %>%
@@ -82,54 +88,28 @@ get_summary_table= function(
            entry_date = lubridate::as_date(diag_date_min ),
            ICDint = lubridate::interval(birthday, entry_date),
            age.at.icd = ICDint/dyears(1)) %>%
-    select(-ICDint)
+    select(pid, sex, age.at.icd)
 
-  df= df %>%
-    mutate(hf= ifelse(pid %in% pids.list$hfpef,"hfpef",
-                      ifelse(pid %in% pids.list$hfref, "hfref", "hfmref")))
+  # clean sex
+  pid.df= pid.df%>%
+    mutate(sex= ifelse(sex=="m, f", NA,sex ),
+           sex= ifelse(grepl("m", sex), "m", sex),
+           sex= ifelse(grepl("f", sex), "f", sex))
+
+
+  df = df %>% select(-sex) %>% left_join(pid.df,by= "pid")
 
   #phenotypic data
   if(!exists("pheno_df")){
     pheno_df= readRDS("T://fsa04/MED2-HF-Comorbidities/data/processed_data/full_clinic_info.rds")
   }
 
-  df= df %>% left_join(pheno_df %>% dplyr::rename(pid= patient_id),by= "pid")
-
-  # calculate age at earliest HF diagnosis
-  if(!exists("hf_meta")){
-    hf_meta = read.csv("T:fsa04/MED2-HF-Comorbidities/data/RWH_March2020/levinson_comorbidities_in_hf_patients_2020-03-25.csv",
-                       sep = ";",
-                       na.strings=c("","NA")) %>% as_tibble
-  }
-
-  df = df %>% left_join(hf_meta, by = "pid")
+  df= df %>%
+    left_join(pheno_df %>%
+                select(-sex)%>%
+                dplyr::rename(pid= patient_id),by= "pid")
 
   HF_allcause= c("I11.0", "I13.0", "I13.2", "I25.5", "I42.0", "I42.5", "I42.8", "I42.9", "I50.0", "I50.1", "I50.9")
-
-
-  #calculate age at the first HF diagnosis:
-  age= df  %>%
-    mutate(birthday= as_date(birthday),
-           entry_date = as_date(entry_date),
-           ICDint = interval(birthday, entry_date),
-           age.at.icd = ICDint/dyears(1)) %>%
-    select(-ICDint,-birthday) %>%
-    filter(icd4 %in% HF_allcause) %>%
-    group_by(pid) %>%
-    summarise("age_at_HF"= min(age.at.icd))
-
-  df= df %>% left_join(age)
-
-  #calculate age at the mean date of our 10 year time window:
-
-  mean_date= mean(range(df$entry_date))
-  age_at_mean= df  %>% distinct(pid, birthday) %>%
-    mutate(birthday= as_date(birthday),
-           ICDint = interval(birthday, mean_date),
-           age.at.mean = ICDint/dyears(1))%>%
-    distinct(pid, age.at.mean)
-
-  df= df %>% left_join(age_at_mean)
 
   df= df %>% filter(!is.na(PheCode))
 
@@ -149,7 +129,7 @@ get_summary_table= function(
 
   ## add lipid blood values
   if(!exists("full_lipids")){
-    full_lipids= readRDS( file.path("T:/fsa04/MED2-HF-Comorbidities/data/processed_data/", "median_lipids_20210621.rds"))
+    full_lipids= readRDS( file.path("T:/fsa04/MED2-HF-Comorbidities/data/processed_data/", "median_lipids_20221006.rds"))
 
   }
   df = df %>% left_join(full_lipids)
@@ -207,9 +187,9 @@ get_summary_table= function(
   #
   #
   #library(gt)
-  library(glue)
+  #library(glue)
   #library(gtsummary)
-  df= df %>% mutate(sex= ifelse(sex== "u", NA, sex))
+  #df= df %>% mutate(sex= ifelse(sex== "u", NA, sex))
   return(df)
 }
 
@@ -286,3 +266,11 @@ plot_summary_table=function(df, col.order= c()){
 
 #get_summary_table(data, pids.list = pids.hf_ct)
 
+
+unify_axis= function(x){
+  x+
+    theme(axis.text = element_text(size= 11, color = "black"),
+          axis.title= element_text(size= 9, color= "black"),
+          legend.title = element_text(size= 11),
+          legend.text = element_text(size= 9))
+}

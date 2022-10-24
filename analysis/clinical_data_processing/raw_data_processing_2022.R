@@ -87,6 +87,7 @@ pharma = rbind(x3,x4) %>% select(-same_length) %>% ungroup %>%
 saveRDS(pharma, file = file.path(directory, "Medication_df.rds"))
 
 # Demografics -------------------------------------------------------------
+
 demo = raw %>%
   filter(grepl("^demo", entity)) %>%
   group_by(patient_id, entry_date) %>%
@@ -366,6 +367,7 @@ bp2 = bp2 %>%
   drop_na()
 
 bp2= bp2 %>% filter(mean.sys <330, mean.dias< 200)
+
 ggplot(bp2 %>% filter(count<40), aes(x= count))+
   geom_histogram(bins= 100)
 
@@ -375,7 +377,6 @@ bp2 %>% pivot_longer(cols = c(mean.sys, mean.dias)) %>%
   geom_density(alpha = 0.5)
 
 saveRDS(bp2, file = file.path(directory, "diag_bp.rds") )
-
 
 
 # weight ------------------------------------------------------------------
@@ -438,11 +439,11 @@ height %>%
 
 # load lipids and BMI . processed by rebecca ----------------------------------
 
-bmi= as_tibble(readRDS(file.path(directory, "height_weight_pairs_temp_20210621.rds")))
-tri= as_tibble(readRDS(file.path(directory, "trigs_20210621.rds")))
-hdl = as_tibble(readRDS(file.path(directory, "HDL_20210621.rds")))
-ldl = as_tibble(readRDS(file.path(directory, "LDL_20210621.rds")))
-tc = as_tibble(readRDS(file.path(directory, "Total_Cholesterol_20210621.rds")))
+bmi= as_tibble(readRDS(file.path(directory, "heights_weights_bmis_20102022.rds")))
+tri= as_tibble(readRDS(file.path(directory, "trigs_20221006.rds")))
+hdl = as_tibble(readRDS(file.path(directory, "HDL_20221006.rds")))
+ldl = as_tibble(readRDS(file.path(directory, "LDL_20221006.rds")))
+tc = as_tibble(readRDS(file.path(directory, "Total_Cholesterol_20221006.rds")))
 
 df= tri
 col = "Trigs"
@@ -470,6 +471,7 @@ tc = get_median(tc, "Chol")
 # merge to df:
 
 full_lipids= full_join(bmi, tri) %>% full_join(hdl) %>% full_join(ldl) %>% full_join(tc)
-saveRDS(full_lipids, file.path(directory, "median_lipids_20210621.rds"))
+
+saveRDS(full_lipids, file.path(directory, "median_lipids_20221006.rds"))
 
 

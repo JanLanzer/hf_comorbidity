@@ -937,7 +937,7 @@ perform_full_fit= function(model= "lr", df,  tfidf= F, hyp.param) {
   #model_df= mod_df[1:100, 1000:1153]
   if(model == "lr"){
     fit_all= do.elasticnet1(model_df= df2,
-                            pids.list,
+                            #pids.list,
                             penalty = hyp.param$penalty,
                             ratio=hyp.param$mixture, seed= 20 )
   }else if(model =="rf"){

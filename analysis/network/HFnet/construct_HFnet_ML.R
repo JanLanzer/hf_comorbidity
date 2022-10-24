@@ -30,8 +30,8 @@ library(ggrepel)
 library(igraph)
 library(ComplexHeatmap)
 
-data = readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/ICD10_labeled_phe.rds")
-pids.list= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/cohort_pids/hf_types_pids.rds")
+data = readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/ICD10_labeled_phe2022.rds")
+pids.list= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/cohort_pids/hf_types_pids2022.rds")
 
 map(pids.list, length)
 
@@ -47,9 +47,9 @@ HF_allcause= c("I11.0", "I13.0", "I13.2", "I25.5", "I42.0", "I42.5", "I42.8", "I
 #get all pids
 pids= unlist(pids.list$hf_all)
 #pids= unlist(pids.list[2:4])
-pids= unlist(c(pids.list$hfref,pids.list$hfpef, pids.list$hfmref))
+#pids= unlist(c(pids.list$hfref,pids.list$hfpef, pids.list$hfmref))
 #remove process data
-data= data%>% filter(!startsWith(entry_value, "Z"))
+data= data%>% filter(!startsWith(entry_value, "Z"))%>% drop_na(PheCode)
 
 #calculate disease frequencies
 phecode.frequency=
@@ -61,17 +61,17 @@ phecode.frequency=
   left_join(Phe_dic)
 
 # at least 10 patients with that PheCode
+cutoff= 50
 
-hist(phecode.frequency$rel_freq, breaks= 100)
 phecodes= phecode.frequency%>%
-  filter(rel_freq>0.01)%>%
+  filter(freq>cutoff)%>%
   pull(PheCode2)
-
+length(phecodes)
 p.phe.counts=
   ggplot(phecode.frequency, aes(x= reorder(PheCode, -freq)  , y= log10(freq)))+
   geom_point()+
   theme_classic()+
-  geom_hline(yintercept = log10(24), col = "grey", size= 1, type= 2)+
+  geom_hline(yintercept = log10(cutoff), col = "grey", size= 1, type= 2)+
   geom_vline(xintercept = length(phecodes),  col = "grey")+
   theme(axis.text.x = element_blank())+
   labs(x= "PheCodes",
@@ -84,9 +84,11 @@ pdf("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/figures/supp/feature_cut
 p.phe.counts
 dev.off()
 
-saveRDS(phecodes, "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/top300_disease.rds")
+saveRDS(phecodes, "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/topfreq_disease.rds")
 
 data_r= data %>% distinct(pid, PheCode, Phenotype)
+
+
 .links= create.links(pids= pids,
                      phecodes = phecodes,
                      data= data_r)

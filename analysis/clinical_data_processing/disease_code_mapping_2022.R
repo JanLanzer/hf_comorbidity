@@ -23,6 +23,8 @@ library(tidyverse)
 library(lubridate)
 library(ICD10gm)
 
+source("analysis/utils/utils.R")
+
 directory= "T:/fsa04/MED2-HF-Comorbidities/data/RWH_September2022/raw/"
 
 #load phewas maps
@@ -34,90 +36,41 @@ phewas2= read_csv(file = "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/dat
 Phecode_definitions= read.csv("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/databases/PheWas/phecode_definitions1.2.csv",
                               colClasses = rep("character", 7)) %>% as_tibble
 
+## icd10 new
+raw= read.csv(file= "T:/fsa04/MED2-HF-Comorbidities/data/RWH_September2022/raw/levinson_comorbidities_data_2022-10-06.csv",sep = ";")
 
+## demo_new
 data= read.csv(paste0(directory,"levinson_comorbidities_pids_2022-10-06.csv"), sep = ";")
-# Load ICD10-dataset
-icd10_labeled = readRDS("T:/fsa04/MED2-HF-Comorbidities/data/RWH_March2020/output_Jan/ICD10_labeled.rds")
 
-#old df
-icd10_labeled = readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/ICD10_labeled.rds")
+# Load ICD10-dataset#old df
+icd10_lab_old = readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/ICD10_labeled.rds")
 
-table(unique(data$pid) %in% unique(icd10_labeled$pid))
-unique(data$pid)[!unique(data$pid) %in% unique(icd10_labeled$pid)]%>% write.csv("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/missing_icd10data.csv")
+data = as_tibble(raw) %>% filter(entity %in% c("diagnostik.nebendiagnose.icd.kode","diagnostik.hauptdiagnose.icd.kode"))
 
+## assess which disease codes are new=
+table(unique(data$entry_value) %in% unique(icd10_lab_old$entry_value))
 
-data= data %>% as_tibble() %>% arrange(pid)%>%
-  separate_rows(diags, sep = ", ")
-
+old_phe_dic = readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/icd10_phewas_dictionary.rds")
+## assess which disease codes are new
 
 # add ICD10 labels --------------------------------------------------------
-#1) calculate age at diagnosis
-icd10_mod = data  %>%
-  mutate(birthday= lubridate::as_date(birthday),
-         entry_date = lubridate::as_date(diag_date_min ),
-         ICDint = lubridate::interval(birthday, entry_date),
-         age.at.icd = ICDint/dyears(1)) %>%
-  select(-ICDint,-birthday)
-
-icd10_mod
-
-#explore range
-range(icd10_mod$age.at.icd, na.rm = T)
-#filter
-icd10_mod= icd10_mod %>% filter(age.at.icd < 120) #2151889 has age 163
-
-
-#2) add icd3 codes and labels
-# create a 3-digit ICD10- version ( can be used to simplify visualization)
-icd3 = lapply(data$diags, function(x){
-  strsplit(x,"\\.")[[1]][1]
-})
-
-icd10_mod = mutate(data, icd3 = unlist(icd3))
-
-#3) use library to get ICD labels (ICD3 and ICD)
-ICD = icd_meta_codes %>%
-  select(icd_normcode, label, label_icd3) %>%
-  rename(entry_value = icd_normcode) %>%
-  as_tibble %>%
-  drop_na()%>%
-  distinct(entry_value, label, label_icd3)
-
-# there is a problem with the icd_meta_codes data. Some codes recieve double labeling which is redundant
-duplicat = ICD[ICD$entry_value %>% duplicated,]%>% arrange(entry_value) %>% select(entry_value)
-ICD2 = ICD %>% filter(entry_value %in% duplicat$entry_value) %>% arrange(entry_value) # the double labeled rows are captured
-
-ICD2 = ICD2[seq(1,length(ICD2$entry_value), 2),] # every second row is deleted
-
-ICD3= ICD %>% filter(!entry_value %in% duplicat$entry_value) %>% arrange(entry_value) # ICD3 contains only those codes without duplicates
-
-ICD= rbind(ICD3, ICD2) %>% arrange(entry_value) #merging both results in a complete and unique list!
-
-
-# add labels
-icd10_mod = icd10_mod %>%
-  left_join(ICD%>% rename(diags= "entry_value"), by= "diags")
-
-# save modified icd10 table
-
-saveRDS(icd10_mod, file= "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/ICD10_labeled_2022.rds")
-
-
-
-# disease mapping of ICD10 codes to disease concepts ----------------------
-icd10_labeled = icd10_mod%>% rename(entry_value= diags)
-# Disease Concept = PheWas codes
-
+#disease Concept = PheWas codes
 # explore how many icd10 codes are in the phewas bank
-table(unique(icd10_labeled$entry_value) %in% phewas2$ICD10)
+table(unique(data$entry_value) %in% phewas2$ICD10)
+
 
 #add another icd10 code version XXX.X (icd4)
-icd10_lab = icd10_labeled %>%
-  mutate(icd4 =  str_replace(entry_value, "(\\..).","\\1"))  %>%
-  distinct(entry_value, icd3, icd4) %>%
-  arrange(entry_value)
+data= data %>%
+  mutate(icd4 =  str_replace(entry_value, "(\\..).","\\1"),
+         icd3 = substr(entry_value,1,3 )) %>%
+  distinct(entry_value, pid, entity, icd3, icd4)
 
+table(unique(data$entry_value) %in% unique(old_phe_dic$entry_value))
+table(unique(data$icd4) %in% unique(old_phe_dic$icd4))
+table(unique(data$icd3) %in% unique(old_phe_dic$icd3))
 
+icd10_lab = data
+phewas2= phewas2.mod
 #now perform a stepwise mapping, using different versions of the icd10 code to map to phewas
 #1. map XXX.XX
 icd10_1= icd10_lab %>%
@@ -126,32 +79,118 @@ icd10_1= icd10_lab %>%
             by= "entry_value")
 
 #2. of those XXX.XX that couldnt be mapped, take the XXX.X version and map again
-icd10_2= icd10_1 %>%
+icd10_2 = icd10_1 %>%
   dplyr::filter(is.na(PheCode)) %>%
-  select(1:3) %>%
+  select(1:5) %>%
   left_join(phewas2 %>%
               rename(icd4 = ICD10 ),
             by = "icd4")
 
 #3. of those XXX.X that couldnt be mapped, take the XXX version and map again
-icd10_3= icd10_2 %>%
+icd10_3 = icd10_2 %>%
   filter(is.na(PheCode)) %>%
-  select(1:3) %>%
+  select(1:5) %>%
   left_join(phewas2 %>% rename(icd3 = ICD10 ), by = "icd3")
 
 #4. combine all three mappings for greater coverage:
-icd10_phewas= rbind(icd10_1 %>% drop_na(),
-      icd10_2 %>% drop_na(),
-      icd10_3 %>% drop_na() )
+icd10_phewas = rbind(icd10_1 %>% drop_na(PheCode),
+      icd10_2 %>% drop_na(PheCode),
+      icd10_3 %>% drop_na(PheCode) )
+
 
 #still ~1000 XXX.XX codes couldnt be mapped to a PheWAS code
-length(unique(icd10_labeled$entry_value))
-table(unique(icd10_labeled$entry_value) %in% icd10_phewas$entry_value) #all
+length(unique(icd10_lab$entry_value))
+table(unique(icd10_lab$entry_value) %in% icd10_phewas$entry_value) #all
+
+
+
+### add disease categories:
+
+icd10_phewas= icd10_phewas %>%
+  left_join(Phecode_definitions %>%
+              rename(PheCode = phecode)%>%
+              select(-phenotype, -phecode_exclude_range))
+
+
+saveRDS(icd10_phewas, file ="T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/ICD10_labeled_phe2022.rds")
+
+
+
+
+# check mapping stats -----------------------------------------------------
+
+unmapped_codes= sort(unique(data$entry_value[!data$entry_value %in% icd10_phewas$entry_value]))
+
+x = data%>%
+  filter(entry_value %in% unmapped_codes)%>%
+  distinct(pid, entry_value, icd4, icd3)%>%
+  group_by(entry_value)%>%
+  count %>%
+  arrange(desc(n))%>%
+  filter(!grepl("Z", entry_value),
+         !grepl("U", entry_value),
+         !grepl("Y", entry_value),
+         !grepl("Z", entry_value))
+
+top_codes= x %>% filter(n>100)%>% pull(entry_value)
+
+filter(ICD10 %in%  top_codes)
+
+p1= x %>%
+  filter(n>100)%>%
+  ggplot(., aes(x= reorder(entry_value,n), y= n))+
+  geom_col()+
+  coord_flip()+
+  scale_y_log10()+
+  labs(x= "unmapped ICD10 codes")+
+  theme_minimal()
+
+p1 %>% unify_axis()
+
+x %>% mutate(PheCode = ifelse(entry_value== "I27.28", "415.2", ""),
+             PheCode = ifelse(entry_value== "F05.0", "290.2", PheCode),
+             PheCode = ifelse(entry_value== "F32.9", "296.22", PheCode),
+             PheCode = ifelse(entry_value== "F32.1", "296.22", PheCode),
+             PheCode = ifelse(entry_value== "M51.2", "722.6", PheCode),
+             PheCode = ifelse(entry_value== "L82", "702.2", PheCode))
+#m51,
+df= rbind(c("M51", "722.6"), # lumbar degen
+      c("M81", "743.11"), #
+      c("F32", "296" ), ##depressive mood
+      c("F05", "290.2" ), #delir
+      c("I27.28", "415.2"), #pulmonary dis
+      c("M15.9","740.2") #polyarthorsis
+      )
+colnames(df)= c("ICD10", "PheCode")
+
+maps= as_tibble(df)%>%
+  left_join(phewas2 %>% select(-ICD10), by= "PheCode")%>%
+  mutate(`ICD10 String` = NA)%>%
+  distinct()
+
+phewas2.mod= rbind(phewas2, maps)
+
+saveRDS(phewas2.mod, "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/databases/PheWas/phecode_icd10_mod.rds")
+
+phe_dic = icd10_phewas%>% distinct(entry_value, icd4, icd3, PheCode, Phenotype, category)
+
+# plot the # codes -------------------------------------------------------------------------
+
+barplot(c("ICD10"= length(unique(icd10_phewas$entry_value)),
+       "ICD10_4digit"= length(unique(icd10_phewas$icd4)),
+       "ICD10_3digit"= length(unique(icd10_phewas$icd3)),
+  "PheCode"= length(unique(icd10_phewas$PheCode))
+),ylim = c(0,7000)
+)
+icd10_phewas %>% distinct(pid, entry_value, PheCode, icd3)
+
+
+
 
 
 # analyze the number of mapped codes. step by step ------------------------
-all_codes= unique(icd10_lab$entry_value)
-length(all_codes) #7817 unique codes
+all_codes= unique(data$entry_value)
+length(all_codes) #7517 unique codes
 
 #1
 codes= icd10_1 %>% filter(is.na(PheCode))%>% distinct(entry_value) %>% pull(entry_value)
@@ -174,61 +213,66 @@ length(unique(xcodes3)) #mapped: 410 with xxx.xx
 
 
 
-
-
-
 #check if this provides more coverage
-table(unique(icd10_labeled$entry_value) %in% phewas2$ICD10)
+table(unique(icd10_lab$entry_value) %in% phewas2$ICD10)
 table(unique(icd10_lab$icd4) %in% phewas2$ICD10)
 table(unique(icd10_lab$icd3) %in% phewas2$ICD10)
 
 
-# PROBLEM : muliple phecode for the same icd10 code -----------------------
 
+
+
+
+
+
+
+
+
+
+
+# PROBLEM : muliple phecode for the same icd10 code -----------------------
 
 ## check for each level how many additional codes were mapped
 dobled= phewas2%>%
   filter(ICD10 %in% phewas2$ICD10[duplicated(phewas2$ICD10)]) %>%
   arrange(ICD10)  %>%
   #distinct(ICD10,PheCode, Phenotype) %>%
-  filter(ICD10 %in% all_codes)
+  filter(ICD10 %in% all_codes)%>%
+  filter(!grepl("Z", ICD10),
+         !grepl("U", ICD10),
+         !grepl("Y", ICD10),
+         !grepl("Z", ICD10))
 dobled
 
-length(unique(dobled$ICD10))
-phewas2 %>% unique(ICD10)
-
-phewas2[!unique(phewas2$ICD10),]%>% arrange(ICD10) %>% print(n=100)
-
-table(all_codes %in% phewas2$ICD10)
-
-dim(icd10_1 %>% filter(is.na(PheCode)))[1]
-
-table(unique(icd10_lab$entry_value) %in% (icd10_1 %>% dplyr::filter(!is.na(PheCode)) %>% pull(entry_value)))# entry
-
-level2y = dim(icd10_2%>% drop_na)[1]
-level3y= dim(icd10_3 %>% drop_na)[1]
-table(unique(icd10_labeled$entry_value) %in% icd10_3$entry_value)#icd4
+unique(dobled$ICD10)
 
 
+icd10_phewas%>% filter(entry_value=="A15.9")
 
 # Continue analyzing the mapping:  ----------------------------------------
 
+table(icd10_lab$entry_value %in% icd10_phewas$entry_value)
 
-#find those code
-x= icd10_labeled[!icd10_labeled$entry_value %in% icd10_phewas$entry_value,] %>%
-  distinct(entry_value, icd3,label_icd3 ) %>%
-  arrange(entry_value)
-
-# find the frequency of those codes in our data to estimate whether those codes are important
-
-x= x %>%
-  left_join(freqs, by= "entry_value") %>%
-  arrange(desc(freq)) %>%
-  distinct(entry_value, freq, label_icd3)
+unmapped_codes=
+  unique(icd10_lab$entry_value[!icd10_lab$entry_value %in% icd10_phewas$entry_value])
 
 #most codes are very infrequeutn, a few seem to be frequent
-ggplot(data= x, aes(x= reorder(entry_value, freq), y= freq))+
-  geom_col()
+data%>% filter(entry_value %in% unmapped_codes)%>%
+  ggplot(., aes(x= entry_value))+
+  geom_histogram(stat= "count")
+
+unmapped_codes_freq= data %>%
+  distinct(pid, entry_value) %>%
+  filter(entry_value %in% unmapped_codes)%>%
+  group_by(entry_value)%>%
+  count %>%
+  filter(n>10)%>%
+  pull(entry_value)
+
+data%>% filter(entry_value %in% unmapped_codes_freq)%>%
+  ggplot(., aes(x= entry_value))+
+  geom_histogram(stat= "count")
+
 
 #zoom in on those that are frequent.  J91 might be an importatn one, the others seem to bel less relevant
 ggplot(data= x[1:50,] , aes(x= reorder(entry_value, freq), y= freq))+
@@ -251,31 +295,4 @@ data.frame( names= names(df_feature), nfeat= df_feature) %>%
   ggplot(aes(x= reorder(names, nfeat), y= nfeat))+
   geom_col()
 
-
-# Create actual mapping for icd10 table -----------------------------------
-
-icd10 = readRDS(file = paste0(directory, "output_Jan/ICD10_labeled.rds"))
-
-icd = icd %>%
-  dplyr::select(pid,entry_date, entry_value) %>%
-  left_join(icd_phewas, by= "entry_value")
-
-saveRDS(icd, file =paste0(directory, "output_Jan/ICD10_labeled_phe.rds"))
-icd_labeled_phe= readRDS(file =paste0(directory, "output_Jan/ICD10_labeled_phe.rds"))
-
-# Add phenotype GROUPS ----------------------------------------------------
-# Phenotypes can be grouped into higher level categories. This Information is taken
-# from the Phecode_definition
-
-table(unique(icd_labeled_phe$PheCode) %ni% Phecode_definitions$phecode)
-# only 1 are not in the definition data. lets take a look at them
-unique(icd_labeled_phe$PheCode)[unique(icd_labeled_phe$PheCode) %ni% Phecode_definitions$phecode] #only some NA..
-
-
-icd_labeled_phe= icd_labeled_phe %>%
-  left_join(Phecode_definitions %>%
-              rename(PheCode = phecode)%>%
-              select(-phenotype, -phecode_exclude_range))
-
-saveRDS(icd_labeled_phe, file =paste0(directory, "output_Jan/ICD10_labeled_phe.rds"))
 

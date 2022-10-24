@@ -17,13 +17,16 @@ ops = read.csv("T:/fsa04/MED2-HF-Comorbidities/data/RWH_March2020/levinson_comor
 
 directory= "T:/fsa04/MED2-HF-Comorbidities/"
 
-patients = readRDS(file = "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/data_output/time_range_patientIDs.rds")
 
-icd10 = readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/data_output/ICD10_labeled_phe.rds") %>%
+
+icd10 = readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/ICD10_labeled_phe2022.rds") %>%
   filter(pid %in% patients)
 # get pids from hf cohort:
-pids.list= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/data_output/pidslist_v2021.rds")
+pids.list= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/cohort_pids/hf_types_pids2022.rds")
 
+map(pids.list, length)
+
+patients= pids.list$hf_all
 
 ops_dictionary = read.table(file = "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/data_other/ops2020syst_kodes.txt", sep = ";") %>%
   as_tibble() %>%
@@ -91,8 +94,6 @@ ops_freq  %>% filter(code3 == "5-35" & code4 == "5-37") %>% print(n=100)
 ops_freq  %>% filter(entry_value_3 == "5-375") %>% print(n=100) ## 89 patients with heart transplant
 
 
-
-
 # identify htx patients ---------------------------------------------------
 
 #via ops
@@ -147,7 +148,7 @@ clinical_endpoint= list("intubation"= intu,
      "htx" = htx,
      "pci"= PCI)
 
-saveRDS(clinical_endpoint, "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/data_output/pids_endpoints.rds")
-# mortality?  -------------------------------------------------------------
+saveRDS(clinical_endpoint, "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/cohort_pids/pids_endpoints.rds")
+
 
 
