@@ -27,7 +27,7 @@ source("~/GitHub/hf_comorbidity_genes/analysis/utils/utils_network.R")
 source("~/GitHub/hf_comorbidity_genes/analysis/utils/utils_pairwise_disease.R")
 source("~/GitHub/hf_comorbidity_genes/analysis/utils/utils_hetnet.R")
 
-data = readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/ICD10_labeled_phe.rds")
+data = readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/ICD10_labeled_phe2022.rds")
 
 # PheCode dictionary:
 Phe_dic= data %>%
@@ -38,14 +38,14 @@ Phe_dic= data %>%
 
 # define both cohorts -----------------------------------------------------
 
-hf.pids.list= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/cohort_pids/hf_types_pids.rds")
-phecodes= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/top300_disease.rds")
+hf.pids.list= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/cohort_pids/hf_types_pids2022.rds")
+phecodes= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/topfreq_disease.rds")
 
 
 # Calculate disease networks ----------------------------------------------
 
 dd_links= create_edge_table_for_cohorts(data = data,
-                                        pid.list = hf.pids.list[2:3],
+                                        pid.list = hf.pids.list,
                                         topn_disease = 0,
                                         phecodes = phecodes )
 
@@ -78,14 +78,14 @@ add.breslow.test= function(links1, links2 , name1= "links1", name2= "links2", ..
   links.comb= comb. %>%
     rowwise()%>%
     mutate(p.breslow= DescTools::BreslowDayTest(array(
-      c(a.x+0.5,
-        c.x+0.5,
-        b.x+0.5,
-        d.x+0.5,
-        a.y+0.5,
-        c.y+0.5,
-        b.y+0.5,
-        d.y+0.5),
+      c(a.x+1,
+        c.x+1,
+        b.x+1,
+        d.x+1,
+        a.y+1,
+        c.y+1,
+        b.y+1,
+        d.y+1),
       dim=c(2, 2, 2)
     )
     )$p.value) %>%
@@ -97,13 +97,28 @@ add.breslow.test= function(links1, links2 , name1= "links1", name2= "links2", ..
   return(links.comb)
 }
 
+#set infinite OR to max OR
+reset.OR= function(links){
+  max.OR= max(links$odds.ratio[is.finite(links$odds.ratio)], na.rm = T)
+  links = links %>%
+    mutate(odds.ratio = ifelse(is.infinite(odds.ratio), max.OR, odds.ratio))
+
+}
+
+
 #wrapper, takes same
 get_breslow_disease_links= function(links1, links2,name1= "links1", name2= "links2",
                                     alpha.breslo= 0.05,
                                     alpha.fisher= 0.05,
                                     ...){
 
+  #before calculating breslow p, we will set infinite OR to max OR per cohort
+
+  links1= reset.OR(links1)
+  links2= reset.OR(links2)
+
   sig.links = add.breslow.test(links1 , links2, name1, name2)
+
   sig.links= sig.links  %>%
     mutate(sig= ifelse(p.breslow<alpha.breslo, "s", "ns"),
            sig.x= ifelse(fisher.p.adj.x<alpha.fisher, "s", "ns"),
@@ -153,19 +168,19 @@ visualize_test_results= function(sig.links){
 
   # plot all links and show which disease links are shared based on fisher p-adj =
 
-  p1= ggplot(sig.links, aes(x= log(odds.ratio.hfpef), y= log(odds.ratio.hfref), col= sig.comb))+
+  p1= ggplot(sig.links, aes(x= log10(odds.ratio.hfpef), y= log10(odds.ratio.hfref), col= sig.comb))+
     geom_point(alpha= 0.8)+
     scale_color_manual(values = cols.nice)
 
   #plot only significant links from p.breslow
 
 
-  df= sig.links %>% filter(log10(odds.ratio.hfref)>40)
+  df= sig.links %>% filter(log10(odds.ratio.hfref)>4)
   p2= sig.links %>%
-    filter(p.bres.adj< 0.1)%>%
-    ggplot(. , aes(x= log(odds.ratio.hfpef), y= log(odds.ratio.hfref), col= sig.comb))+
+    filter(p.bres.adj< 0.05)%>%
+    ggplot(. , aes(x= log10(odds.ratio.hfpef), y= log10(odds.ratio.hfref), col= -log10(p.bres.adj)))+
      geom_point(alpha= 0.8)+
-    scale_color_manual(values = cols.nice)
+    scale_color_gradient(low= "red", high = "black")
     # scale_x_continuous(limits = c(-2, 10))+
     # scale_y_continuous(limits = c(-2, 10))
 
@@ -202,6 +217,7 @@ pcomb.= plot_grid(p.$plot.all+
             theme_minimal(),
           p.$plot.sig+
             theme_minimal(),
+          rel_widths = c(1,0.8),
           labels = "AUTO")
 
 
@@ -211,18 +227,27 @@ df.breslow2= hfpef.hfref %>% select(edge_IDs, dis1_phenotype.hfref, dis2_phenoty
                                    fisher.p.adj.hfpef, fisher.p.adj.hfref,
                                    p.breslow, p.bres.adj)
 
+max(hfpef.hfref$odds.ratio.hfpef)
+log10(max(hfpef.hfref$odds.ratio.hfref))
+
+df.breslow2 %>% mutate(loghfpef= log10(odds.ratio.hfpef),
+                       loghfref= log10(odds.ratio.hfref))%>%
+  filter(loghfpef> 3.9
+         )
+
 # hist(df.breslow2$p.breslow, bins= 100)
 # hist(df.breslow2$p.bres.adj, bins= 100)
-df.breslow2%>% filter(p.bres.adj<0.05)
+df.breslow2%>% filter(p.bres.adj<0.01)%>% mutate(loghfpef= log10(odds.ratio.hfpef),
+                                                 loghfref= log10(odds.ratio.hfref))
 p.heat= df.breslow2 %>%
   arrange(p.bres.adj) %>%
   mutate(log.p= -log10(p.breslow+0.0000001))%>%
-  filter(p.bres.adj<0.05) %>%
+  filter(p.bres.adj<0.01) %>%
   mutate(label = paste0(dis1_phenotype.hfref, "+", '\n', dis2_phenotype.hfref))%>%
   dplyr::rename(hfpef= odds.ratio.hfpef,
                 hfref= odds.ratio.hfref)%>%
   pivot_longer(cols = c(hfpef, hfref), names_to = "cohort", values_to = "odds.ratio")%>%
-  ggplot(., aes(x= cohort, y= label, fill = log10(odds.ratio)))+
+  ggplot(., aes(x= cohort, y=reorder(label,-p.bres.adj), fill = log10(odds.ratio)))+
   geom_tile(color ="black")+
   scale_fill_gradient2(low= "blue", mid= "white" ,high = "red")+
   theme_minimal()+
@@ -233,23 +258,25 @@ p.heat
 p.hist= df.breslow2 %>%
   arrange(p.bres.adj) %>%
   mutate(log.p= -log10(p.bres.adj+0.0000001))%>%
-  filter(p.bres.adj<0.05) %>%
-  ggplot(., aes(x= reorder(edge_IDs,log.p),  y= log.p))+
+  filter(p.bres.adj<0.01) %>%
+  ggplot(., aes(x= reorder(edge_IDs,-p.bres.adj),  y= log.p))+
   geom_col(color= "black")+
   geom_hline(yintercept = -log10(0.05))+
   coord_flip()+
   theme_minimal()+
   theme(axis.text.y = element_blank(),
-        axis.title.y = element_blank())+
+       axis.title.y = element_blank())+
   labs(y= "-log10 p-value")
 
 pdf("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/figures/supp/breslow.hmap.pdf",
     width= 7.5,
-    height= 6)
+    height= 15)
 plot_grid(p.heat, p.hist, rel_widths = c(1, 0.3))
 dev.off()
 
-pdf("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/figures/supp/pairwise_disease/breslow.OR.comp.pdf")
+pdf("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/figures/supp/pairwise_disease/breslow.OR.comp.pdf",
+    width= 8,
+    height= 4)
 pcomb.
 dev.off()
 

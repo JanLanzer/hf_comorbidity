@@ -10,7 +10,7 @@
 ##
 ## Email: jan.lanzer@bioquant.uni-heidelberg.de
 ##
-## ------------https://www.danieldsjoberg.com/gtsummary/index.html---------------
+## --------------------------
 ##
 ## Notes:
 ##
@@ -28,14 +28,16 @@ pids.list= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_c
 phecodes= readRDS( "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/topfreq_disease.rds")
 
 map(pids.list, length)
+pids.list$tavi= pids.oi
 
-
-data.r= data %>% filter(pid %in% c(pids.list$hf_all,pids.list$hfpef, pids.list$hfref),
+data.r= data %>% filter(pid %in% c(pids.list$hf_all),#,pids.list$hfpef, pids.list$hfref),
                 PheCode %in% phecodes)
 
 df= get_summary_table(data.r, pids.list[2:4])
-df= get_summary_table(data.r, pids.list[c(2,3)])
-length(unique(table.df$pid))
+df= get_summary_table(data = data.r, pids.list = pids.list[c(2,3,4,5)])
+
+length(unique(table.df$patient_cohort))
+
 
 table.df= df %>%
   filter(patient_cohort != "none") %>%
@@ -55,7 +57,9 @@ table.df= df %>%
            PheCode_count,
            #icd10gm_count,
            charlson_score,
+           charlson_wscore,
            elixhauser_wscore,
+           elixhauser_score,
            nyha.max,
            median.bnp,
            patient_cohort,
@@ -74,6 +78,7 @@ table.df$patient_cohort= str_replace_all(table.df$patient_cohort, "hfref", "HFrE
 table.df$patient_cohort= str_replace_all(table.df$patient_cohort, "hfmref", "HFmrEF")
 
 table(table.df$patient_cohort)
+table(df$patient_cohort)
 
 table.df %>%
   saveRDS(., file = "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/patient_metadata_2022.rds")
@@ -85,7 +90,7 @@ gt.tab= table.df %>%
   #mutate(patient_cohort= ifelse(patient_cohort=="hfpef", "HFpEF", "HFrEF"))%>%
   #filter(sex.y != "u",
   #       patient_cohort != "hf_all")%>%
-  mutate(patient_cohort= factor(patient_cohort, levels= c("HFrEF", "HFmrEF", "HFpEF")))%>%
+  #mutate(patient_cohort= factor(patient_cohort, levels= c("HFrEF", "HFmrEF", "HFpEF")))%>%
   select(patient_cohort,
          sex,
          age.at.icd,
@@ -101,8 +106,10 @@ gt.tab= table.df %>%
          #median.bnp,
          PheCode_count,
          #icd10gm_count,
-         #charlson_score,
+         charlson_score,
+         charlson_wscore,
          elixhauser_wscore,
+         elixhauser_score,
          intu,
          #htx,
          defi,
@@ -139,6 +146,7 @@ gt.tab= table.df %>%
   modify_header(label ~ "**Variable**") %>%
   modify_spanning_header(c("stat_1", "stat_2", "stat_3") ~ "**HF subtypes**")
 
+gt.tab
 
 table(gt.tab$patient_cohort)
 

@@ -21,9 +21,9 @@ library(igraph)
 library(ComplexHeatmap)
 
 dd.net= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/networks/comorbidity/hfnet.rds")
-data = readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/ICD10_labeled_phe.rds")
-pids.list= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/cohort_pids/hf_types_pids.rds")
-link.data= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/networks/comorbidity/link_data2.rds")
+data = readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/ICD10_labeled_phe2022.rds")
+pids.list= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/cohort_pids/hf_types_pids2022.rds")
+#link.data= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/networks/comorbidity/link_data2.rds")
 pids= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/cohort_pids/pids_endpoints.rds")
 c.info= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/full_clinic_info.rds")%>%
   distinct(patient_id, sex)%>% filter(sex != "u")%>% mutate(sex= ifelse(sex=="m", "male", ifelse(sex=="f", "female", sex)))
@@ -196,9 +196,9 @@ jacc.df = t(jaccs_sc) %>%
   as_tibble() %>%
   mutate(cluster= factor(names(diseasecluster),levels = names(diseasecluster)))%>%
   pivot_longer(-cluster)
-pids.interesting$all_patients = pids.list$hf_all
-pids.interesting= pids.interesting[names(pids.interesting) != "hfmref"]
-pids.interesting$hfmref = pids.list$hfmref
+# pids.interesting$all_patients = pids.list$hf_all
+# pids.interesting= pids.interesting[names(pids.interesting) != "hfmref"]
+# pids.interesting$hfmref = pids.list$hfmref
 for (i in names(pids.interesting)){
   print(i)
    jacc.df= jacc.df %>%
@@ -226,11 +226,16 @@ plot.df%>%
   #scale_fill_manual(values= col.set)+
   theme_minimal()
 
+p1 = plot.df%>%
+  ggplot(., aes(x= cluster,y= group , fill =mean))+
+  geom_tile()+
+  #scale_fill_manual(values= col.set)+
+  theme_minimal()
 
-
+print(p1)
 plot.hmap= plot.df %>% filter(group!= "n") %>% pivot_wider(-median, names_from = cluster, values_from = mean)
 plot_h= column_to_rownames(plot.hmap, "group")
-Heatmap(plot_h[c("hfpef", "hfmref", "hfref"),], cluster_columns = T,rect_gp = gpar(col= "black"))
+Heatmap(plot_h[c("hfpef", "hfref"),], cluster_columns = T,rect_gp = gpar(col= "black"))
 
 Heatmap(plot_h[,], cluster_columns = T,rect_gp = gpar(col= "black"))
 
@@ -303,7 +308,9 @@ Heatmap(rbind(hfpef,hfref), name = "mean scaled jaccard", rect_gp = gpar(col= "b
 
 # run wilcox to test difference for each cluster between hfpef-hfref
 x= 1
-p.vals= map(seq(1:10), function(x){
+unique(jacc.df$cluster)
+p.vals= map(unique(jacc.df$cluster), function(x){
+  print(x)
   x1= jacc.df%>% filter(cluster== x, hfref=="hfref")%>% pull(value)
   x2= jacc.df%>% filter(cluster== x, hfpef=="hfpef")%>% pull(value)
   wilcox.test(x1, x2)$p.value
@@ -315,7 +322,7 @@ enframe(p.vals)%>% mutate(value = unlist(value))%>% mutate(logp= -log10(value), 
 
 
 
-p.vals= map(seq(1:10), function(x){
+p.vals= map(unique(jacc.df$cluster), function(x){
   wilcox.test(jaccs.res$hfpef[x, ],
               jaccs.res$hfref[x, ])$p.value
 
@@ -375,7 +382,7 @@ colnames(plot_h) = paste0("DC.", colnames(plot_h))
 ha = HeatmapAnnotation(significance =p.val.df$sig,
                        col= list(significance= c("<0.001"= "darkred", "<0.05"= "red", "ns"= "grey")))
 
-p_jaccard= Heatmap(plot_h[c("hfpef", "hfmref", "hfref"),],
+p_jaccard= Heatmap(plot_h[c("hfpef", "hfref"),],
         cluster_columns = F,
         cluster_rows = F,
         top_annotation = ha,

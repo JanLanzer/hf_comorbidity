@@ -1,6 +1,29 @@
 ## these are useful functions when analysing comorbidity networks:
 
 
+
+get_edges_with_edgeID= function(net =NULL, links= NULL){
+  if(!is.null(net)){
+    edge.module_net = as_tibble(igraph::as_data_frame(net, what = "edges"))
+
+    edge_IDs= map2(edge.module_net$from, edge.module_net$to, function(x,y){
+      paste(sort(c(x,y)),collapse="_")
+    })
+  }else{
+    edge.module_net= links
+    edge_IDs= map2(edge.module_net$disease1, edge.module_net$disease2, function(x,y){
+      paste(sort(c(x,y)),collapse="_")
+    })
+  }
+
+  edge_IDs= unlist(edge_IDs)
+  x= cbind(edge.module_net,edge_IDs)
+
+  as_tibble(x)
+
+}
+
+
 ## selects the largest connected component from an igraph object
 #' @param net, igraph graph object to select the LCC from
 
@@ -401,7 +424,7 @@ quickvisnet= function(net, save_comp= T){
 #' @param pids, patient ids used to create the network
 #' @param data, full data table of all diagnostic entries in patients
 #'
-quick_base_net = function(links, pids, data, weight_col = "corr.phi"){
+quick_base_net = function(links, pids, data, weight_col = "corr.phi",Phe_dic){
   #get nodes stats
   nodes=  unique(c(links %>% pull(disease1),
                    links %>% pull(disease2)))
@@ -487,11 +510,13 @@ module= function(net){
 #function to perform louvain_partion based on maximal modularity
 #' @param , net =igraph net, (UW) to for community analysis
 
-modularize= function(net, method= "lovain", ...){
+modularize= function(net, method= "lovain", resolution_parameter, ...){
 
   #lovain
   if(method== "louvain"){
-    louvain_partition <- igraph::cluster_louvain(net, weights = E(net)$weight)
+    louvain_partition <- igraph::cluster_louvain(net,
+                                                 weights = E(net)$weight,
+                                                 resolution_parameter= resolution_parameter)
 
   }else if(method== "spinglass"){
     louvain_partition= cluster_spinglass(net,
@@ -499,7 +524,7 @@ modularize= function(net, method= "lovain", ...){
   }else if(method== "leiden"){
     louvain_partition= cluster_leiden(net,objective_function = "modularity",
                                          weight= E(net)$weight,
-                                      resolution_parameter = 1)
+                                      resolution_parameter = resolution_parameter)
     #louvain_partition
   }
 
@@ -568,7 +593,10 @@ modularize= function(net, method= "lovain", ...){
             top_annotation = ha,
             right_annotation = ra,
             show_heatmap_legend = T,
-            name= "%", row_names_side = "left"
+            name= "%",
+            row_names_side = "left",
+            rect_gp = gpar(col = "darkgrey", lwd = 2)
+
     )
   h.map
 

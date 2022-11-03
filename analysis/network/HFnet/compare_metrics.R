@@ -36,7 +36,7 @@ edge_IDs= map2(edge.module_net$from, edge.module_net$to, function(x,y){
 
 p.rho= quick_base_net(.links%>% filter(rho_part_lower>0),#, fisher.p.adj<0.05),
                         pids,
-                        data_comb,
+                        data,
                         weight_col ="pcorr.corpor") %>% get_edges_by_metric()
 
 rho= quick_base_net(.links%>% filter(corr.tet>0, fisher.p.adj<0.05),

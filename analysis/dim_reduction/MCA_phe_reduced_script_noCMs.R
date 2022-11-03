@@ -488,13 +488,13 @@ library(ggExtra)
 
 source("~/GitHub/hf_comorbidity_genes/analysis/utils/utils_classifier_ML.R")
 
-set.seed(2)
+set.seed(10)
 
 
 #### UMAP
 
 df= mca.df%>% mutate_all(as.numeric)
-umap_res= umap(df)
+umap_res= umap(df,preserve.seed= T)
 
 umap.plot = as_tibble(cbind(as_tibble(umap_res$layout), pid=  rownames(df))) %>%
   mutate(hf = ifelse(pid   %in% pids.list$hfref,
@@ -676,38 +676,48 @@ print(pls[[1]])
 
 
 ## tSNE
-## tSNE
+
 df= mca.df[!duplicated(mca.df), ]
 dim(df)
 
 tsne_res= Rtsne(df, check_duplicates = F, perplexity = 50)
 
 patient.df = tibble(pid= rownames(df)) %>%
-  mutate(hf= ifelse(pid %in% pids.list$hfpef,"hfpef", "hfref"),
-         hf= factor(hf, levels= c("hfpef", "hfref") )) %>%
+  mutate(hf = ifelse(pid   %in% pids.list$hfref,
+                     "HFrEF",
+                     ifelse(pid   %in% pids.list$hfpef,
+                            "HFpEF",
+                            ifelse(pid   %in% pids.list$hfmref,
+                                   "HFmrEF",
+                                   "unlabeled"))))%>%
+  mutate(hf= factor(hf, levels= c("HFpEF","HFmrEF", "HFrEF", "unlabeled")))%>%
   left_join(sum.tfilt%>% mutate(pid= as.character(pid)), by= "pid")%>%
   mutate(htx= ifelse(pid %in% endpoint$htx, "yes", "no"),
          intu= ifelse(pid %in% endpoint$intubation, "yes", "no"),
          defi= ifelse(pid %in% endpoint$defi, "yes", "no"),
-         pci= ifelse(pid %in% endpoint$pci, "yes", "no"))
+         pci= ifelse(pid %in% endpoint$pci, "yes", "no"),
+         tavi= ifelse(pid %in% pids.oi, "yes", "no"))
 
 
 tsne.plot = as_tibble(cbind(as_tibble(tsne_res$Y), pid=  rownames(df))) %>%
   left_join(patient.df, by= "pid")
 
-tsne= ggplot(tsne.plot, aes(x= V1, y= V2, color = hf))+
+tsne= ggplot(tsne.plot, aes(x= V1, y= V2, color = sex))+
   geom_point()+
   scale_color_manual(values= c("red", "black","grey"))+
   ggtitle("tsne")
 
-p.tsne= ggplot(tsne.plot, aes(x= V1, y= V2, color = htx))+
+p.tsne= ggplot(tsne.plot, aes(x= V1, y= V2, color = pci))+
   geom_point()+
   scale_color_manual(values= c("red", "black","grey"))+
   ggtitle("tsne")
 
 p.tsne
 
-
+p.tsne= ggplot(tsne.plot, aes(x= V1, y= V2, color = tavi))+
+  geom_point()+
+  scale_color_manual(values= c("red", "black","grey"))+
+  ggtitle("tsne")
 
 
 # select patients ---------------------------------------------------------

@@ -20,6 +20,7 @@
 library(tidyverse)
 library(igraph)
 library(ComplexHeatmap)
+library(psych)
 
 source("~/GitHub/hf_comorbidity_genes/analysis/utils/utils_network.R")
 source("~/GitHub/hf_comorbidity_genes/analysis/utils/utils.R")
@@ -28,56 +29,60 @@ dd.net= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/network
 data = readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/ICD10_labeled_phe.rds")
 pids.list= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/cohort_pids/hf_types_pids.rds")
 link.data= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/networks/comorbidity/link_data.rds")
-dd.net= net
+
+
 phe_dic= link.data$phe_dic
 ## CAVE: when calculating shortest path with igraph, or other metrics that rely on edge weights.
 # weights can be interpreted as "costs", i.e. high weight is high distance between two nodes.
 # create weight inverted net
-dd.net.inv = dd.net
-#E(dd.net.inv)$weight= (1/(E(dd.net.inv)$weight-1))+1
 x= E(dd.net.inv)$weight
-1/(1-x)
 
-E(dd.net.inv)$weight = 1/(1-x)
-
-
+E(dd.net)$weight.inv = abs(max(x)-x)+0.00001
+range(E(dd.net)$weight)
+range(E(dd.net)$weight.inv)
 
 # calculate df with node centralitiy measures  ----------------------------
-
 centrality.df= enframe(igraph::degree(dd.net), value= "degree", name= "PheCode")
 centrality.df$size= V(dd.net)$size
 centrality.df$strength= strength(dd.net)
 centrality.df= centrality.df %>% left_join(phe_dic)
 
 #closeness (average shortest path length)
-closeness.= closeness(dd.net.inv, normalized = T,
-                      weights = E(dd.net.inv)$weight)
+closeness.= closeness(dd.net, normalized =T ,
+                      weights = (E(dd.net)$weight.inv))
 
 cc= transitivity(dd.net, type = "weighted")
-btwn= betweenness(dd.net.inv, directed = F, weights= E(dd.net)$weight, normalized = T)
+btwn= betweenness(dd.net, directed = F, weights= E(dd.net)$weight.inv, normalized = T)
 stren= strength(dd.net)
 
 centrality.df$strength= stren
 centrality.df$cc= cc
 centrality.df$btw= btwn
-centrality.df= centrality.df %>%  left_join(phe_dic)
 centrality.df$closeness= closeness.
 
-df2= centrality.df%>% drop_na()#%>% mutate(category= factor(category))
 
-assortativity_nominal(dd.net, types = V(dd.net)$group_cat, directed = F)
-?assortativity_nominal
+assortativity_nominal(dd.net, types = as.numeric(as.factor(V(dd.net)$group_louv)), directed = F)
+assortativity_nominal(dd.net, types = as.numeric(as.factor(V(dd.net)$group_cat)), directed = F)
+assortativity_degree(dd.net)
+
+centrality.df%>% arrange(desc(closeness))%>% print(n=100)
+
+
 # plot relation to size ---------------------------------------------------
-library(psych)
+
 corr.plot = centrality.df[, c( "size", "degree", "strength", "cc", "btw", "closeness")]
 p.centrality.measures= pairs.panels(corr.plot, method= "pearson",
              )
+
 pdf("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/figures/supp/node_feature_corrs.pdf",
     height = 6,
     width = 6)
-pairs.panels(corr.plot, method= "pearson",
+pairs.panels(corr.plot, method= "pearson",breaks = 25, hist.col = cols.nice[2]
 )
 dev.off()
+
+
+# ANOVA  ------------------------------------------------------------------
 
 #calculate ANOVAs p-value
 sapply(c( "size", "degree", "strength", "cc", "btw", "closeness"), function(x){
@@ -117,7 +122,7 @@ p.dis.cats= plot_grid(
    geom_boxplot()+
    theme(axis.text.x = element_text(angle= 60, hjust= 1))+
    labs(x= "",
-        y= ),
+        y= ""),
 
 ggplot(centrality.df, aes(x= category, y= degree))+
   geom_boxplot()+
@@ -133,7 +138,6 @@ ggplot(centrality.df, aes(x= category, y= cc))+
   geom_boxplot()+
   theme(axis.text.x = element_text(angle= 60, hjust= 1))+
   labs(x= ""),
-
 nrow = 3
 )
 pdf("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/figures/supp/node_feature_cats.pdf",
@@ -142,6 +146,7 @@ pdf("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/figures/supp/node_featur
 p.dis.cats
 dev.off()
 
+hist(centrality.df$degree, breaks= 50)
 
 # calculate rank of cardiac - non cardiac links  --------------------------
 
@@ -228,8 +233,15 @@ centrality.df %>% arrange(desc(degree))
 
 # check main diseases
 main_disease= c("585.3", "401.1", "272.13", "250.2", "296.22", "496",
-                "280.1","327.3","411.4", "hfpef", "hfref")
-phe_dic %>% filter(PheCode %in% main_disease)
+                "280.1","327.3","411.4")
+
+centrality.df %>%
+  mutate(r.size= rank(desc(size)),
+         r.degree= rank(desc(degree)),
+         r.closeness = rank(desc(closeness )),
+         r.btw = rank(desc(btw ))
+         )%>%
+  filter(PheCode %in% main_disease)
 
 phe_dic= phe_dic%>% mutate(Phenotype= ifelse(PheCode == "280.1",
                                              "Iron deficiency anemia",
@@ -241,17 +253,32 @@ node_props= map(main_disease, function(x){
     mutate(node= x)
 })%>% do.call(rbind, .)
 
+order.ph= node_props %>%
+  filter(measure %in% c("degree", "betweenness", "closeness"))%>%
+  left_join(phe_dic%>% rename(node= PheCode))%>% group_by(Phenotype)%>%
+  summarise(m.r= mean(rank))%>%
+  arrange(desc(m.r))%>% pull(Phenotype)
+
+
 p.node.feat=
   node_props %>%
   filter(measure %in% c("degree", "betweenness", "closeness"))%>%
   left_join(phe_dic%>% rename(node= PheCode)) %>%
-  mutate(rank= 352-rank)%>%
+  mutate(Phenotype= factor(Phenotype, levels= order.ph))%>%
   ggplot(., aes(y= Phenotype, x= measure, fill = rank))+
-  geom_tile()+
-  scale_fill_gradient(low= "white", high = "red")+
+  geom_tile(col = "black")+
+  geom_text(aes(label = round(rank, 1)), size= 2.5) +
+  scale_fill_gradient(low= "red", high = "grey", limits= c(1, 283))+
   coord_equal()+
   theme_bw()+
   theme(axis.text.x= element_text(angle = 60, hjust= 1))
 
-p.node.feat
+unify_axis(p.node.feat)
+
+pdf("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/figures/supp/comorbidity_net/topcentral_disease.pdf",
+    height = 6.5,
+    width = 4)
+unify_axis(p.node.feat)
+dev.off()
+
 

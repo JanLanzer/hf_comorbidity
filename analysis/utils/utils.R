@@ -117,13 +117,14 @@ get_summary_table= function(
 
   charlson = comorbidity::comorbidity(df, id= "pid", code ="entry_value", score= "charlson", assign0 = F)
   elixhauser = comorbidity::comorbidity(df, id= "pid", code ="entry_value", score= "elixhauser", assign0 = F)
-
+  elixhauser = comorbidity::comorbidity(df%>% mutate(entry_value = str_replace_all(entry_value, ".", "")),
+                                        id= "pid", code ="entry_value", score= "elixhauser", assign0 = F)
   df= df %>% left_join(charlson %>% select(pid, wscore, score) %>%
                          rename(charlson_wscore= wscore,
                                 charlson_score= score)%>%
                          mutate(pid = as.numeric(pid))) %>%
     left_join(elixhauser %>% select(pid, wscore_ahrq, score) %>%
-                rename(elixhauser_wscore= wscore_ahrq,
+                rename(elixhauser_wscore= wscore_vw ,
                        elixhauser_score= score)%>%
                 mutate(pid = as.numeric(pid)))
 

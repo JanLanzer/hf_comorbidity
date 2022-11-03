@@ -208,11 +208,14 @@ get.pairwise.metric = function(A.tidy){
   require(DescTools)
   ## first part: run fisher exact test on pairwise
   A.res= A.tidy %>%
+    mutate(a= a+1,
+           b= b+1,
+           c= c+1,
+           d= d+1)%>%
     rowwise() %>%
-    mutate(fisher.p = fisher.test(matrix(c(a,b,c,d), nrow= 2, byrow = T))$p.value,
+    mutate( fisher.p = fisher.test(matrix(c(a,b,c,d), nrow= 2, byrow = T))$p.value,
             odds.ratio = fisher.test(matrix(c(a,b,c,d), nrow= 2, byrow = T))$estimate,
-
-            corr.phi = psych::phi(matrix(c(a,b,c,d), nrow= 2, byrow = T)),
+            corr.phi = psych::phi(matrix(c(a,b,c,d), nrow= 2, byrow = T), digits= 5),
             corr.tet = psych::tetrachoric(matrix(c(a,b,c,d), nrow= 2, byrow = T))$rho,
             somersD= ((a*d)- (b*c)) / min((a*d)+(b*c)+ (a*b)+ (c*d), (a*d)+(b*c)+((a*c)+ (b*d)))
            )%>%

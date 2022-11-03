@@ -720,14 +720,14 @@ do.randomf1 = function(model_df,pids.list,mtry,trees, seed= 20 ){
 # ## 3.data transformation -----------------------------------------------------
 
 ## transform to tfidf space:
-#' @param , list of patients and their disease codes
+#' @data , data frame with patients (pid), and diseases (PheCode) per row
 #' @return matrix (patients x diseases) with tf idf values
 
 table_to_tfidf_frame= function(data){
 
   #1) keep per patient only diagnosis with different entry dates
 
-  df= data %>% distinct(pid, entry_date, PheCode) %>% drop_na
+  #df= data %>% distinct(pid, entry_date, PheCode) %>% drop_na
 
   #remove NAs
 

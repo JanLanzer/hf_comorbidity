@@ -29,7 +29,7 @@ link.data= readRDS( "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/net
 
 df= disease_frequencies(link.data$pid, link.data$data)%>% select(-rel_freq)
 
- x= link.data$links%>%
+x= link.data$links%>%
   left_join(df %>% rename(disease1= PheCode,
                           dis1.f= freq))%>%
   left_join(df %>% rename(disease2= PheCode,
@@ -37,7 +37,7 @@ df= disease_frequencies(link.data$pid, link.data$data)%>% select(-rel_freq)
   mutate(delta.f= abs(dis1.f-dis2.f))
 
 
-x= x %>% mutate(RR= (a*d)/(dis1.f*dis2.f),
+x= x %>%rowwise()%>% mutate(RR= (a*d)/(dis1.f*dis2.f),
                 sd.= (1/a) + (1/(dis1.f*dis2.f)) - (1/d) -(1/(d*d)),
                 RR.l= RR-2.56*sd.,
                 RR.u= RR+2.56*sd.)
@@ -49,8 +49,6 @@ ggplot(x, aes(x= RR.l, y= RR.u))+
 
 1/x$a + (1/(x$dis1.f*x$dis2.f)) - (1/x$d) -(1(x$d*x$d))
 
-
-x%>% filter(disease2 == "hfpef")%>% filter(RR.l>1)%>% View()
 
 ggplot(x%>% filter(fisher.p.adj<0.05), aes(x= delta.f, y= corr.phi))+
    geom_point()
@@ -64,16 +62,20 @@ ggplot(x, aes(x= RR, y= delta.f))+
   geom_point()+
   scale_y_log10()
 
+ggplot(x, aes(x= corr.phi, y= delta.f))+
+  geom_point()+
+  scale_y_log10()
+
 ggplot(x, aes(y= delta.f, x= corr.tet))+
   geom_point()+
   scale_y_log10()+
   geom_density_2d_filled(alpha = 0.5)
 
-ggplot(x, aes(x= (RR), y= corr.phi))+
+ggplot(x, aes(y= (RR), x= corr.phi))+
   geom_point()+
-  scale_x_log10()
+  scale_y_log10()
 
-ggplot(x, aes(x= log10(RR), y= log10(odds.ratio)))+
+ggplot(x, aes(x= (RR), y= log10(odds.ratio)))+
   geom_point()
 
 
@@ -99,7 +101,8 @@ data %>%mutate(hf = ifelse(pid   %in% pids.list$hfref,
                                ifelse(pid   %in% pids.list$hfmref,
                                       "HFmrEF",
                                       "unlabeled"))))%>%
-  filter(pid %in% pids.list$hf_all)%>% distinct(entry_date,hf,  pid)%>%
+  filter(pid %in% pids.list$hf_all)%>%
+  distinct(entry_date,hf,  pid)%>%
   group_by(hf,pid) %>% count()%>%
   ggplot(., aes(x= hf, y= n))+
   geom_jitter()+
@@ -174,3 +177,8 @@ p4=data.mod.sc %>%
 
 
 cowplot::plot_grid(p1, p2, p3, p4,p5)
+
+
+# test run scale phi ------------------------------------------------------
+
+

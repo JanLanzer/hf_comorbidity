@@ -7,7 +7,7 @@ library(cowplot, lib.loc = .libPaths()[1])
 library(tidymodels)
 library(tidyverse)
 library(qdapTools)
-
+library(ggrepel)
 
 # loadings ----------------------------------------------------------------
 source("analysis/utils/utils_classifier_ML.R")
@@ -170,7 +170,6 @@ cor.test(comp_feat$importance, abs(comp_feat$estimate))
 ggplot(data= comp_feat, aes(x= abs(estimate), y= importance))+
   geom_point()
 
-library(ggrepel)
 
 hfref= comp_feat %>% filter( importance >0.01) %>% arrange(desc(estimate)) %>% pull(PheCode)
 hfpef= comp_feat  %>% filter( importance >0.01)  %>% arrange((estimate)) %>% pull(PheCode)
