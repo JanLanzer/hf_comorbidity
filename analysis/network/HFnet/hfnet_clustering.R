@@ -346,7 +346,6 @@ dev.off()
 links= igraph::as_data_frame(net, "edges")
 nodes= igraph::as_data_frame(net, "vertices")
 
-#Hfnet= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/networks/comorbidity/hfnet.rds")
 write_delim(links, "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/output/HFnet_links.tsv", delim = "\t")
 write_delim(nodes, "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/output/HFnet_nodes.tsv",delim = "\t")
 

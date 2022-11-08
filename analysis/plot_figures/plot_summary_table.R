@@ -32,9 +32,11 @@ pids.list$tavi= pids.oi
 
 data.r= data %>% filter(pid %in% c(pids.list$hf_all),#,pids.list$hfpef, pids.list$hfref),
                 PheCode %in% phecodes)
+data.r= data %>% filter(pid %in% c(pids.list$hfmref,pids.list$hfpef, pids.list$hfref),
+                        PheCode %in% phecodes)
 
 df= get_summary_table(data.r, pids.list[2:4])
-df= get_summary_table(data = data.r, pids.list = pids.list[c(2,3,4,5)])
+#df= get_summary_table(data = data.r, pids.list = pids.list[c(2,3,4,5)])
 
 length(unique(table.df$patient_cohort))
 
@@ -144,15 +146,23 @@ gt.tab= table.df %>%
   add_overall()%>%
   add_n() %>%
   modify_header(label ~ "**Variable**") %>%
+  #modify_spanning_header(c("stat_1", "stat_2", "stat_3") ~ "**HF subtypes**")
   modify_spanning_header(c("stat_1", "stat_2", "stat_3") ~ "**HF subtypes**")
-
 gt.tab
 
 table(gt.tab$patient_cohort)
 
 gt::gtsave(as_gt(gt.tab), file ="output/cohor_summary.png")
 
+df.test= table.df%>% filter(patient_cohort %in% c("HFpEF", "HFrEF"))
+t_test(formula= age.at.icd ~ patient_cohort,
+       x = df.test,
+       order = c("HFpEF", "HFrEF"))
 
+df.test%>% group_by(patient_cohort)%>% summarise(mean(median.BMI, na.rm= T))
+
+t_test(formula= age.at.icd ~ patient_cohort,
+       x = table.df%>% filter(patient_cohort %in% c("HFpEF", "HFrEF")))
 
 # full cohort -------------------------------------------------------------
 

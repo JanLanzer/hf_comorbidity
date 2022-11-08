@@ -181,7 +181,10 @@ comp_feat = comp_feat %>%
          )
 
 comp_feat= comp_feat %>%
-  mutate(category = ifelse(category =="NULL","injuries and poisonings", category ))
+  mutate(category = ifelse(category =="NULL","injuries & poisonings", category ),
+         category = ifelse(category =="injuries and poisonings","injuries & poisonings", category )
+         )
+
 
 p1= ggplot(data= comp_feat, aes(x= estimate, y= importance, color = category))+
   geom_point(size= 2)+
@@ -218,7 +221,8 @@ p2= ggplot(data= comp_feat, aes(x= estimate, y= importance, color = category))+
 unify_axis(p2)
 
 p.df= comp_feat%>%
-  filter(PheCode %in% c(hfpef[1:25], hfref[1:25]))%>%
+  #filter(PheCode %in% c(hfpef[1:25], hfref[1:25]))%>%
+  filter(PheCode %in%feat.vector[1:100])%>%
   mutate(hf= ifelse(estimate<0, "HFpEF", "HFrEF"))
 
 p3.1= p.df %>%
@@ -237,12 +241,12 @@ p3= p.df %>%
   geom_point(aes(color= category), size= 3)+
   scale_color_manual(values= col_vector)+
   geom_col(width=0.1)+
-  facet_grid(rows= vars(hf),scales= "free" )+
+  facet_grid(rows= vars(hf),scales= "free", space= "free_y" )+
   theme_minimal()+
   theme(axis.text.x = element_text(angle= 90, hjust= 1),
         panel.border = element_rect(colour = "black", fill=NA, size=1),
         legend.position = "none")+
-  labs(x= "Elatsic net estimate",
+  labs(x= "absolute parameter",
        y  = "Phenotype")
 
 unify_axis(p3)
@@ -271,7 +275,7 @@ dev.off()
 
 pdf("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/figures/main/classifier_feature_numb.pdf",
     width= 7,
-    height= 8
+    height= 13
 )
 unify_axis(p3)
 
@@ -303,3 +307,62 @@ p3.1
 
 dev.off()
 
+
+# assess dis.sig diversity ------------------------------------------------
+
+feat.vector= comp_feat%>% filter(estimate!= 0) %>% arrange(desc(abs(estimate))) %>%
+  pull(PheCode)
+
+df= comp_feat%>% filter(PheCode  %in% feat.vector[1:100])
+table(df$estimate>0)
+
+#x= "infectious diseases"
+
+map(unique(comp_feat$category), function(x){
+
+  comp_feat %>% filter(category == x) %>% pull(estimate)%>% hist(., breaks= 25)
+
+  #lm(as.formula(paste0(x, " ~ estimate")), data= comp_feat)
+})
+
+p1= comp_feat%>% filter(PheCode  %in% feat.vector[1:100])%>%
+  arrange(estimate)%>%
+  mutate(label2= ifelse(estimate>0, "HFrEF", "HFpEF"))%>%
+  ggplot(., aes(fill = category,y= abs(estimate),
+                         x = label2))+
+  geom_bar(position = "fill", stat = "identity")+
+  scale_fill_manual(values= col_vector)+
+  theme_minimal()+
+  theme(panel.border = element_rect(size= 1, fill= NA))+
+  labs(x= "",y= "%", fill  = "")
+
+unify_axis(p1)
+
+x= comp_feat%>% filter(estimate != 0)%>% arrange(estimate)%>%
+  mutate(label2= ifelse(estimate>0, "HFrEF", "HFpEF"))
+
+
+x2= table(x$label2, x$category)
+p2= t(x2)%>%as.data.frame()%>%
+  ggplot(., aes(x= Var2, y= Freq, fill = Var1))+
+  geom_bar(position = "stack", stat = "identity")+
+  scale_fill_manual(values= col_vector)+
+  theme_minimal()+
+  theme(panel.border = element_rect(size= 1, fill= NA))+
+  labs(x= "",y= "count", fill  = "")
+x2= prop.table(table(x$label2, x$category),1)
+p3= t(x2)%>%as.data.frame()%>%
+  ggplot(., aes(x= Var2, y= Freq, fill = Var1))+
+  geom_bar(position = "stack", stat = "identity")+
+  scale_fill_manual(values= col_vector)+
+  theme_minimal()+
+  theme(panel.border = element_rect(size= 1, fill= NA))+
+  labs(x= "",y= "%", fill  = "")
+pdf("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/figures/main/feature_distribution.pdf",
+    width= 4,
+    height= 5
+)
+unify_axis(p1)
+unify_axis(p2)
+unify_axis(p3)
+dev.off()

@@ -22,10 +22,10 @@ library(tidyverse)
 library(GDAtools)
 library(tidyverse)
 library(qdapTools)
-library(magrittr)
 library(factoextra)
 library(ggrepel)
-
+library(ggExtra)
+library(umap)
 
 
 # Read data and prepare ---------------------------------------------------
@@ -484,7 +484,7 @@ dev.off()
 
 #DiM red---------------------------------------------------------
 
-library(ggExtra)
+
 
 source("~/GitHub/hf_comorbidity_genes/analysis/utils/utils_classifier_ML.R")
 
@@ -731,3 +731,50 @@ pids.oi
 x= disease_frequencies(pids = pids.oi, icd = icd)
 xy= disease_frequencies(pids = unlist(pids.list[2:3])[!unlist(pids.list[2:3]) %in% pids.oi], icd = icd)
 icd %>% filter(PheCode =="425.1", !pid %in% pids.oi) %>% distinct(icd4, PheCode)
+
+
+# ####### full cohort umap ------------------------------------------------
+
+
+
+
+icd_red = icd %>%
+  drop_na %>%
+  distinct(pid, PheCode) %>%
+  filter(pid %in% unlist(pids.list),
+         PheCode %in% phecodes)
+
+# icd_red is full dataset to work with. This will now be subsetted to answer specific questions of interest.
+length(unique(icd_red$pid))
+length(unique(icd_red$PheCode))
+
+#### use all patients, use all diagnostics and analyze impact of HF and Gender as qualitativ variables
+## 1) transform full data set into input format for MCA function
+
+mca.df=MCAinput(df = icd_red)
+
+colnames(mca.df) = gsub("^X", "", colnames(mca.df))
+
+df= mca.df%>% mutate_all(as.numeric)
+umap_res= umap(df,preserve.seed= T)
+
+umap.plot = as_tibble(cbind(as_tibble(umap_res$layout), pid=  rownames(df))) %>%
+  mutate(hf = ifelse(pid   %in% pids.list$hfref,
+                     "HFrEF",
+                     ifelse(pid   %in% pids.list$hfpef,
+                            "HFpEF",
+                            ifelse(pid   %in% pids.list$hfmref,
+                                   "HFmrEF",
+                                   "unlabeled"))))%>%
+  mutate(hf= factor(hf, levels= c("HFpEF","HFmrEF", "HFrEF", "unlabeled")))# %>%
+
+p.umap.hf =ggplot(umap.plot, aes(x= V1, y= V2, color = hf))+
+  geom_point(alpha= 0.7, size= .5)+
+  #scale_color_manual(values=c( col.set[2], "#7FC6A4", col.set[3]))+
+  scale_color_manual(values= cols.nice[-3])+
+  labs(color="HF cohort",
+       x= "",
+       y = "")+
+  theme_classic()+
+  guides(colour = guide_legend(override.aes = list(size=4)))
+

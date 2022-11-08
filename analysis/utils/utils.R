@@ -40,7 +40,7 @@ cols.nice= c("#264653","#2a9d8f","#e9c46a","#f4a261","#e76f51")
 library(RColorBrewer)
 qual_col_pals = brewer.pal.info[brewer.pal.info$category == 'qual',]
 col_vector = unlist(mapply(brewer.pal, qual_col_pals$maxcolors, rownames(qual_col_pals)))
-col_vector= col_vector[-4]
+col_vector= col_vector[c(-4,-12)]
 hfpef_cols= c("#EF946C", "#785474")
 up_dn_cols= c("#0353A4", "#C41E3D")
 #function to characterize a given patient cohort:
@@ -76,11 +76,9 @@ get_summary_table= function(
   # if(!exists("pids.list")){
   #   pids.list = pids.list= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/data_output/pidslist_v2021.rds")
   # }
-
-  if(!exists("pid.df")){
-    pid.df= read.csv( "T:/fsa04/MED2-HF-Comorbidities/data/RWH_September2022/raw/levinson_comorbidities_pids_2022-10-06.csv", sep = ";") %>%
+  pid.df= read.csv( "T:/fsa04/MED2-HF-Comorbidities/data/RWH_September2022/raw/levinson_comorbidities_pids_2022-10-06.csv", sep = ";") %>%
       as_tibble
-  }
+
 
   #add age calculation
   pid.df= pid.df  %>%
@@ -117,40 +115,38 @@ get_summary_table= function(
 
   charlson = comorbidity::comorbidity(df, id= "pid", code ="entry_value", score= "charlson", assign0 = F)
   elixhauser = comorbidity::comorbidity(df, id= "pid", code ="entry_value", score= "elixhauser", assign0 = F)
-  elixhauser = comorbidity::comorbidity(df%>% mutate(entry_value = str_replace_all(entry_value, ".", "")),
-                                        id= "pid", code ="entry_value", score= "elixhauser", assign0 = F)
   df= df %>% left_join(charlson %>% select(pid, wscore, score) %>%
                          rename(charlson_wscore= wscore,
                                 charlson_score= score)%>%
                          mutate(pid = as.numeric(pid))) %>%
-    left_join(elixhauser %>% select(pid, wscore_ahrq, score) %>%
+    left_join(elixhauser %>% select(pid, wscore_ahrq,wscore_vw, score) %>%
                 rename(elixhauser_wscore= wscore_vw ,
                        elixhauser_score= score)%>%
                 mutate(pid = as.numeric(pid)))
 
   ## add lipid blood values
   if(!exists("full_lipids")){
-    full_lipids= readRDS( file.path("T:/fsa04/MED2-HF-Comorbidities/data/processed_data/", "median_lipids_20221006.rds"))
+    full_lipids= readRDS( file.path("T:/fsa04/MED2-HF-Comorbidities/data/processed_data/sept2022/median_lipids_20221006.rds"))
 
   }
   df = df %>% left_join(full_lipids)
 
   if(!exists("hba1c")){
-    hba1c= readRDS( file.path("T:/fsa04/MED2-HF-Comorbidities/data/processed_data/", "hba1c_20210701.rds"))
+    hba1c= readRDS( file.path("T:/fsa04/MED2-HF-Comorbidities/data/processed_data/sept2022/hba1c_20221006.rds"))
 
   }
 
   df= df%>% left_join(hba1c %>%
-                        group_by(patient_id) %>%
-                        summarise(median.hba1c = median(entry_value)) %>%
-                        dplyr::rename(pid= patient_id))
+                        group_by(pid) %>%
+                        summarise(median.hba1c = median(entry_value))
+                      )
   ##gfr
   if(!exists("gfrcg")){
-    gfrcg= readRDS( file.path("T:/fsa04/MED2-HF-Comorbidities/data/processed_data/", "gfrcg_20210701.rds"))
+    gfrcg= readRDS( file.path("T:/fsa04/MED2-HF-Comorbidities/data/processed_data/sept2022/gfrcg_20221006.rds"))
 
   }
 
-  df= df%>% left_join(gfrcg %>% group_by(patient_id) %>% summarise(median.gfrcg = median(entry_value)) %>% dplyr::rename(pid= patient_id))
+  df= df%>% left_join(gfrcg %>% group_by(pid ) %>% summarise(median.gfrcg = median(entry_value)))
 
   ## add pharma info:
   if(!exists("pharma")){

@@ -153,7 +153,7 @@ net= quick_base_net(.links%>% filter(is.finite(weight)),
                     Phe_dic = link.data$phe_dic)
 
 net
-V(net)$group_cat[V(net)$group_cat== "NULL"]= "injuries & poisonings"
+V(net)$group_cat[V(net)$group_cat== "NULL"]= "injuries and poisonings"
 
 ##save HFnet
 saveRDS(net, "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/networks/comorbidity/hfnet.rds")
@@ -162,7 +162,11 @@ saveRDS(.links, file ="T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/n
 
 
 
-
+net= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/networks/comorbidity/hfnet.rds")
+V(net)$group_cat[V(net)$group_cat== "injuries & poisonings"]= "injuries and poisonings"
+net= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/networks/comorbidity/hfnet_clustered.rds")
+V(net)$group_cat[V(net)$group_cat== "injuries & poisonings"]= "injuries and poisonings"
+saveRDS(net, "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/networks/comorbidity/hfnet_clustered.rds")
 
 # plot pairwise stats -----------------------------------------------------------------
 

@@ -38,6 +38,7 @@ directory= "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/"
 data= readRDS(file = "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/ICD10_labeled_phe.rds")
 
 
+pids.HF= data %>% group_by(pid)%>% filter(icd3== "I50")%>% distinct(icd3, pid) %>%pull(pid)%>% unique()
 #new cohort 2022
 pid.df= read.csv( "T:/fsa04/MED2-HF-Comorbidities/data/RWH_September2022/raw/levinson_comorbidities_pids_2022-10-06.csv", sep = ";")
 #add age calculation
@@ -146,6 +147,7 @@ pids.LvEE= as.integer(pids.LvEE)
 
 #calculate number of hf diagnosis per patient ( cannot be the same day)
 HF_allcause= c("I11.0", "I13.0", "I13.2", "I25.5", "I42.0","I42.3", "I42.6", "I42.7","I50.0", "I50.1", "I50.9")
+
 data_count_HF= data %>%
   filter(pid %in% pids.icd10) %>%
   distinct(pid, entry_date, entry_value, icd3, icd4) %>%

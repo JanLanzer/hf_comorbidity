@@ -28,15 +28,17 @@ comp_feat= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/output/HF
 
 source("analysis/utils/utils_classifier_ML.R")
 
-data = readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/data_output/ICD10_labeled_phe.rds")
+data = readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/ICD10_labeled_phe2022.rds")
+pids.list= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/cohort_pids/hf_types_pids2022.rds")
 
-hf = read.csv("T:fsa04/MED2-HF-Comorbidities/data/RWH_March2020/levinson_comorbidities_in_hf_patients_2020-03-25.csv",
-              sep = ";",
-              na.strings=c("","NA")) %>% as_tibble
+phecodes= readRDS( "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/topfreq_disease.rds")
 
-pids.list= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/cohort_pids/hf_types_pids.rds")
+cross.all= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/data_output/classifier_output/hfpef_hfref_fit_newID_noicd2022.rds")
 
-phecodes= readRDS( "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/top300_disease.rds")
+hyp.param = get_best_hyper(cross.all, "lr")
+rm(cross.all)
+
+
 
 pids= c(pids.list$hfpef,pids.list$hfref)
 
@@ -55,10 +57,56 @@ set.seed(20)
 # do a universal cv_split
 cv_splits <- vfold_cv(mod_df, strata = hf)
 
-
+#lr_full= perform_full_fit(model = "lr", data, tfidf= F, hyp.param = hyp.param)
 
 # select testing grid -----------------------------------------------------
-hist(comp_feat$estimate, breaks= 40)
+
+feat.vector= comp_feat%>% filter(estimate!= 0) %>% arrange(desc(abs(estimate))) %>%
+   pull(PheCode)
+
+ddf= lapply(feat.vector[2:length(feat.vector)], function(x){
+  print(x)
+
+  feats= feat.vector[1:match(x,feat.vector )]
+
+  sub.data= mod_df[,c("hf", feats)]
+
+  res= do.LR(model_df = sub.data,
+        cv_splits = cv_splits,
+        penalty = hyp.param$penalty,
+        mix = 0,  #we want all parameters included
+        seed = 2    )
+
+  res%>%
+    mutate(nParam= length(feats))
+
+
+})
+ddf= ddf %>% do.call(rbind, .)
+
+saveRDS(ddf, "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/data_output/classifier_output/feat.selection.rds")
+
+ddf %>% filter(nParam== 100)
+p= ddf %>%
+  ggplot(aes(y= mean, x= nParam))+
+  geom_point(size = 0.9)+
+  theme_minimal()+
+  theme(panel.border = element_rect(size= 1, fill = NA))+
+  labs(y= "CV mean AUROC",
+       x= "n Parameter")
+
+
+
+comp_feat %>% filter(PheCode %in% feat.vector[1:75])
+
+pdf("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/figures/main/classifier_cutoff.pdf",
+    width= 5,
+    height= 5
+)
+unify_axis(p)
+dev.off()
+# old version with training error (no CV) ---------------------------------
+
 
 test.cutoffs= seq(0.01,1.4, 0.03)
 

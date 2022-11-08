@@ -493,7 +493,7 @@ do.elasticnet=function(model_df,cv_splits, seed= 20){
 }
 
 
-do.LR=function(model_df,cv_splits, seed= 20){
+do.LR=function(model_df,cv_splits, penalty, mix, seed= 20){
 
 
   set.seed(seed)
@@ -501,7 +501,7 @@ do.LR=function(model_df,cv_splits, seed= 20){
 
   # Model spec
   lr_mod <-
-    logistic_reg(penalty = NULL,  mixture = NULL) %>%
+    logistic_reg(penalty = penalty,  mixture = penalty) %>%
     set_engine("glmnet")
 
   # Recipe (data transformation and formula)
@@ -531,46 +531,13 @@ do.LR=function(model_df,cv_splits, seed= 20){
     tune_grid(
       resamples= cv_splits
     )
-  ?tune_grid
+
   # define best models:
   best_mods= tune_res %>%
     show_best("roc_auc")
 
-  # define best model:
-  best_mod= tune_res %>%
-    select_best("roc_auc")
 
-  point=best_mods %>% filter(penalty== best_mod$penalty &
-                               mixture== best_mod$mixture)
-
-  # plot results of tuning:
-  p.hyper = collect_metrics(tune_res) %>%
-    mutate(mixture= factor(round(mixture,1)))%>%
-    ggplot(., aes(x= penalty, y= mean, color = mixture))+
-    geom_line(size= 1.5, alpha = 0.4)+
-    scale_color_viridis_d(option = "plasma", begin = 1, end = 0)+
-    facet_grid(rows=vars(.metric))+
-    geom_point(alpha = 0.8)+
-    scale_x_log10(labels = scales::label_number())+
-    geom_vline(xintercept= best_mods$penalty)+
-    geom_point(data= point,aes( x= penalty, y= mean),
-               size= 3,
-               color = "red")+
-    theme_minimal()
-
-
-  #### 4. Use cross tuning parameters to test performance
-
-  best_mods= best_mods %>% mutate(best= ifelse(penalty== best_mod$penalty &
-                                                 mixture== best_mod$mixture,
-                                               "yes",
-                                               "no"))
-
-  results= list(res= tune_res,
-                best_mods= best_mods,
-                p.hyper= p.hyper)
-
-  return(results)
+  return(best_mods)
 
 }
 
