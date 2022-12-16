@@ -20,12 +20,11 @@
 library(tidyverse)
 library(igraph)
 library(RandomWalkRestartMH)
+library(qdapTools)
+
 # Load Network layers and data --------------------------------------------
-
 # D-D
-
 source("analysis/utils/utils_hetnet.R")
-
 edges =
   readRDS( file ="T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/output/multilayer_edge_list.rds")
 
@@ -40,14 +39,14 @@ set.seed(20)
 dg= edges$disease_gene %>% filter(nodeB %in% V(edges$disease$heidelberg)$name)
 
 disease_sets = sample(unique(dg$nodeB), replace = F)
-
+cutoff_distance= 0.5
 # new ---------------------------------------------------------------------
 
 get_disease_pred_results= function(disease_to_predict,
                                    ppi_net_multiplex,
                                   dd_net_multiplex,
                                   dg_fil,
-                                  cutoff= 0.7,
+                                  cutoff= 0.5,
                                   dis_distance){
 
   #filter disgenet:
@@ -90,7 +89,7 @@ get_disease_pred_results= function(disease_to_predict,
                                        r=0.85)
 
     g.test= RWRH_PPI_Disease_Results$RWRMH_Multiplex1 %>%
-      rename(value= Score,
+      dplyr::rename(value= Score,
              name= NodeNames)%>% as_tibble()
 
     test_res= validate_results_partial(set= test_genes, gene_results = g.test, FPR_cutoff = 0.02)
@@ -118,45 +117,90 @@ get_disease_pred_results= function(disease_to_predict,
 
 
 
- cutoff_distance= 0.7
+
 
 
 #  call for each layer ----------------------------------------------------
 
 
 #### DD-comorbidity net
-randomized_dd= function(edges, disease_sets){
-
-  xdd =randomize_links_by_layer(as_data_frame(edges$disease$heidelberg))
-   # we only need to pass different versions of the randomized dd net:
+randomized_dd= function(edges, disease_sets, nperm= 10){
 
   ppi_net_multiplex= create.multiplex(edges$gene)
 
-  dg= edges$disease_gene %>% filter(nodeB %in% unique(c(xdd$real$from, xdd$real$to)))
+  dg= edges$disease_gene %>% filter(nodeB %in% V(edges$disease$heidelberg)$name)
+
+  dis_distance= get_Disgenet_overlaps(dg)
+  disease_sets= rownames(dis_distance)
+
+  perm_res= map(seq(1:nperm), function(perm){
+
+    set.seed(perm)
+    print(perm)
+    xdd =randomize_links_by_layer(igraph::as_data_frame(edges$disease$heidelberg), rewireprob= 1)
+    #xdd= xdd[c("random.degree", "random.complete")]
+    xdd= xdd["random.complete"]
+    res_dd= lapply(xdd, function(x){
+
+          dnet= igraph::graph_from_data_frame(x)
+
+          dd_net_multiplex= create.multiplex(list("heidelberg"= dnet))#,"barcelona"= dd_net2)) #to be decided
+
+          aurocs. = get_disease_pred_results(disease_to_predict = disease_sets,
+                                  ppi_net_multiplex,
+                                   dd_net_multiplex = dd_net_multiplex,
+                                   dg_fil = dg,
+                                   cutoff = cutoff_distance,
+                                   dis_distance = dis_distance
+
+                                  )
+          return(aurocs.)
+          })
+    return(res_dd)
+  })
+  return(perm_res)
+
+   # we only need to pass different versions of the randomized dd net:
+
+
+
+}
+
+randomized_dd2= function(edges){
+
+  ppi_net_multiplex= create.multiplex(edges$gene)
+
+  dg= edges$disease_gene %>% filter(nodeB %in% unique(V(edges$disease$heidelberg)$name))
 
   dis_distance= get_Disgenet_overlaps(dg)
 
-  res_dd=
-      lapply(xdd, function(x){
+  #disease_sets= rownames(dis_distance)
 
-        dnet= graph_from_data_frame(x)
+  perm_res= map(seq(0, 1, 0.2), function(perm){
+    set.seed(perm)
+    print(perm)
 
-        dd_net_multiplex= create.multiplex(list("heidelberg"= dnet))#,"barcelona"= dd_net2)) #to be decided
+    xdd =randomize_links_by_layer(igraph::as_data_frame(edges$disease$heidelberg), rewireprob= perm)
 
-        aurocs. = get_disease_pred_results(disease_to_predict = disease_sets,
-                                 ppi_net_multiplex,
-                                 dd_net_multiplex = dd_net_multiplex,
-                                 dg_fil = dg,
-                                 cutoff = cutoff_distance,
-                                 dis_distance = dis_distance
+    dnet= igraph::graph_from_data_frame(xdd$random.complete)
 
-                                )
+    dd_net_multiplex= create.multiplex(list("heidelberg"= dnet))#,"barcelona"= dd_net2)) #to be decided
 
-
+    aurocs. = get_disease_pred_results(disease_to_predict = disease_sets,
+                                         ppi_net_multiplex,
+                                         dd_net_multiplex = dd_net_multiplex,
+                                         dg_fil = dg,
+                                         cutoff = cutoff_distance,
+                                         dis_distance = dis_distance
+                                       )
+    names(aurocs.)= disease_sets
+    return(aurocs.)
     })
 
-  return(res_dd)
-}
+  names(perm_res)= seq(0, 1, 0.2)
+  return(perm_res)
+  }
+
 
 #### D-G layer
 
@@ -170,6 +214,7 @@ randomized_dg =function(edges, disease_sets){
   dg= edges$disease_gene %>% filter(nodeB %in% dd_net_multiplex$Pool_of_Nodes)
 
   dis_distance= get_Disgenet_overlaps(dg)
+
 
   xdg= randomize_links_by_layer(dg)
 
@@ -245,10 +290,13 @@ randomized_gg= function(edges, disease_sets){
  return(res_gg)
 }
 
-##
+##call
+r.res= randomized_dd2(edges)
 
-  dd_res= randomized_dd(edges, disease_sets)
-  saveRDS(dd_res, "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/output/randomization_layer_dd2.rds")
+saveRDS(r.res, "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/output/randomization_layer_dd3.rds")
+
+#dd_res= randomized_dd(edges,disease_sets =  disease_sets[1:2],nperm= 1)
+  saveRDS(dd_res, "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/output/randomization_layer_dd3.rds")
 
   dg_res= randomized_dg(edges, disease_sets)
   saveRDS(dg_res, "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/output/randomization_layer_dg.rds")
@@ -258,34 +306,182 @@ randomized_gg= function(edges, disease_sets){
 
 
 # plot dd -----------------------------------------------------------------
+
 library(ggpubr)
 
-plot_feat= function(feat= "pr", dd_res){
+plot_feat= function(feat= "pr", r.res){
 
-  listed.aurocs= map(dd_res, function(x){
-    map(x, function(y){
-      y[[feat]]
-    })%>% unlist()
-  })
+  if(feat=="pr"){
+    listed.aurocs= map(r.res, function(x){
+      map(x, function(y){
+        y$pr$auc.integral
+      })%>% unlist()
+    })
+  }else{
+    listed.aurocs= map(r.res, function(x){
+      map(x, function(y){
+        y[[feat]]
+      })%>% unlist()
+    })
+  }
 
-  dd.df = enframe(listed.aurocs)%>% unnest(value) %>% mutate(disease= rep(disease_sets, 3))
+  names(r.res[[1]])
 
-  p.AUROCS.paired=
-    ggpaired(dd.df%>% filter(name != "random.degree"), x = "name", y = "value",
-             color = "black", line.color = "gray", line.size = 0.1  , linetype =1     )+
-    stat_compare_means(paired = TRUE, method = "wilcox.test")
+  df= map(names(listed.aurocs), function(x){
+    print(x)
+  enframe(listed.aurocs[[x]]) %>%
+       mutate(res= x,
+              feat= feat)
+
+    })
+
+  dd.df= do.call(rbind, df)
+  #
+  # ggplot(dd.df, aes(x= res, y= value))+
+  #   geom_boxplot()
+  #
+  # p.AUROCS.paired=
+  #   ggpaired(dd.df%>% filter(name != "random.degree"), x = "name", y = "value",
+  #            color = "black", line.color = "gray", line.size = 0.1  , linetype =1     )+
+  #   stat_compare_means(paired = TRUE, method = "wilcox.test")
 
 
 }
 
+p1= plot_feat(feat= "AUROC", r.res)
+#p2= plot_feat(feat= "pAUROC", r.res)
+p2= plot_feat(feat= "pr", r.res)
+p3= plot_feat(feat= "median_rank_stat", r.res)
+df.p= rbind(p1,p2,p3)
 
-p1= plot_feat(feat= "AUROC", dd_res)+ggtitle("AUROC")
-p2= plot_feat(feat= "pAUROC", dd_res)+ggtitle("partial AUROC")
-p3= plot_feat(feat= "median_rank_stat", dd_res)+ggtitle("median_rank")
+saveRDS(df.p,"T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/output/new_df.rds" )
+
+## pair data with real results:
+auc_res= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/output/aurocs_multilayer_disease_pred_heart_genenet2022.rds")
+
+plot_feat2= function(feat= "pr", r.res2){
+
+  if(feat=="pr"){
+    listed.aurocs= map(r.res2, function(x){
+      x$test_results$pr$auc.integral
+    })
+  }else{
+    listed.aurocs= map(r.res2, function(x){
+      x$test_results[[feat]]
+    })
+  }
+
+  enframe(listed.aurocs) %>%
+      unnest(value)%>%
+      mutate(res= "HFnet+HPOnet",
+             feat= feat)
+
+  }
+
+p1= plot_feat2(feat= "AUROC", r.res2 = auc_res)
+p2= plot_feat2(feat= "pr", auc_res)
+p3= plot_feat2(feat= "median_rank_stat", auc_res)
+
+df.p = rbind(df.p, p1, p2,p3)
+
+saveRDS(df.p,"T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/output/gene_pred_res.rds" )
+
+df.p= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/output/gene_pred_res.rds" )
+dis= unique(df.p %>% filter(res== "HFnet+HPOnet")%>% pull(name))
+unique(df.p$res)
+df.p$res= str_replace_all("0.", "rewire HFnet 0.", string = df.p$res)
+#df.p$res= str_replace_all("0", "HFnet", string = df.p$res)
+df.p = df.p %>%
+  mutate(feat = ifelse(feat=="pr", "PR-AUC", feat),
+         res= ifelse(res== "0", "HFnet", res),
+         res= ifelse(res== "1", "rewired HFnet", res))%>%
+  filter(res %in% c("HFnet+HPOnet", "HFnet", "rewired HFnet"))%>%
+  mutate(res= factor(res, levels= c("HFnet+HPOnet", "HFnet", "rewired HFnet")))
+
+
+p.all= ggplot(df.p%>% filter(name %in% dis),
+              aes(x= res, y= value))+
+  geom_jitter(color= "darkgrey")+
+  geom_boxplot(width= 0.3,outlier.shape = NA)+
+  facet_grid(cols= vars(feat), space = "free", scales= "free")+
+  theme_bw()+
+  #scale_y_continuous(limits= c(0,0.3))+
+  labs(x= "rewire probability")+
+  theme(axis.text = element_text(angle= 45, hjust= 1))
+
+p.all
+
+x= "PR-AUC"
+
+p1= map(unique(df.p$feat), function(x){
+
+  df= df.p%>% filter(name %in% dis & feat == x)
+  if(x== "AUROC"){
+    li= quantile(df$value, c(0.01, 1))
+    #li= c(0.31, 1.2)
+  }else{
+    li= quantile(df$value, c(0,0.99))
+    #li= c(0, )
+  }
+
+  my_comparisons <- list( c("HFnet", "HFnet+HPOnet"), c("HFnet", "rewired HFnet"))
+
+  p.all= ggplot(df, aes(x= res, y= value))+
+    geom_jitter(aes(color= res))+
+    geom_boxplot(width= 0.3,outlier.shape = NA)+
+    theme_bw()+
+    scale_color_manual(values= c(cols.nice))+
+    scale_y_continuous(limits= li)+
+    labs(x= "",
+         y= x)+
+    theme(legend.position = "none",
+          axis.text.x = element_text(angle= 60, hjust= 1, size= 11))
+  unify_axis(p.all)
+})
+
+cowplot::plot_grid(plotlist = p1, ncol = 3)
+
+df%>% group_by(res)%>% summarise(median(value))
+
+pdf("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/figures/supp/hetnet/HFnet_randomization2022.pdf",
+    width= 7,
+    height= 5)
+
+cowplot::plot_grid(plotlist = p1, ncol = 3)
+
+dev.off()
+
+p.AUROCS.paired=df.p%>%
+  filter(res %in% c("HFnet", "rewired HFnet"),
+         feat == "AUROC",
+         name %in% dis)%>%
+   ggpaired(.,x = "res", y = "value",
+            color = "black", line.color = "gray", line.size = 0.1  , linetype =1     )+
+   stat_compare_means(paired = TRUE, method = "wilcox.test")
+
+stat.test <- df.p %>%
+  group_by(feat) %>%
+  wilcox_test(value ~ res, p.adjust.method = "BH", paired = T)
+# Remove unnecessary columns and display the outputs
+stat.test
+
+
+
+
+p.AUROCS.paired
+
+df.p%>%
+  filter(res %in% c("0", "0.2"),
+         feat == "AUROC")%>%
+        # !name %in% xs)%>%
+  ggplot( aes(x= res, y= value))+
+  geom_jitter(color= "darkgrey")+
+  geom_boxplot(width= 0.3)
+
 
 dd.df = enframe(listed.aurocs)%>% unnest(value) %>% mutate(disease= rep(disease_sets, 3))
 
-dd_res$random.degree[[1]]$pAUROC.object.corrected$auc
+
 listed.aurocs= map(dd_res, function(x){
   map(x, function(y){
     y$pr$auc.integral

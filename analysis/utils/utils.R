@@ -72,6 +72,8 @@ get_summary_table= function(
 
   df = df %>% filter(pid != "none")
 
+  df %>% distinct(pid, patient_cohort) %>% group_by(patient_cohort)%>% count()
+
   #add hfpef label
   # if(!exists("pids.list")){
   #   pids.list = pids.list= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/data_output/pidslist_v2021.rds")

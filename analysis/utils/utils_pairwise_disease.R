@@ -264,7 +264,7 @@ get.part.corr = function(pids, phecodes, data){
 
   t1 <- sirt::tetrachoric2(dat = df, maxit= 1000,
                             cor.smooth = F)
-  ?sirt::tetrachoric2()
+
 
   #t1$rho[ "394.2", "395.1"]=t1$rho["395.1","394.2"]= 0.8
   table(rowSums(is.na(t1$rho)) <1,colSums(is.na(t1$rho)) <1)
@@ -376,7 +376,7 @@ create.links = function(pids, phecodes, data, disease_ontology= "PheCode"){
   #4 part. corr
   cors= get.part.corr(pids, phecodes, data)
   message("4/5")
-  print(head(cors))
+  #print(head(cors))
   # merge link results
   links= links %>%
     left_join(cors, by= c("disease1", "disease2")) %>%
@@ -395,83 +395,4 @@ create.links = function(pids, phecodes, data, disease_ontology= "PheCode"){
 
   return(links)
 }
-#
-#
-# pairwise_matrix <- function(d) {
-#   vars <- if (is.factor(d$v1)) {
-#     levels(d$v1)
-#   } else {
-#     d %>%
-#       select(v1, v2) %>%
-#       unlist() %>% unique()
-#   }
-#   m <- d %>%
-#     select(v1, v2, rho) %>%
-#     bind_rows(select(., v1 = v2, v2 = v1, rho)) %>%
-#     arrange(v2) %>%
-#     spread(v2, rho) %>%
-#     arrange(v1) %>%
-#     select(-v1) %>%
-#     as.matrix() %>% unname()
-#   diag(m) <- 1
-#   rownames(m) <- colnames(m) <- vars
-#   m
-# }
-#
-# partial_data <- function(d, z = 1.96, use.shrinkage = FALSE) {
-#   n <- unique(d$n)
-#   vars <- if (is.factor(d$v1)) {
-#     levels(d$v1)
-#   } else {
-#     d %>%
-#       select(v1, v2) %>%
-#       unlist() %>% unique()
-#   }
-#   v <- colnames()
-#   # (pairwise) correlation matrix
-#   R_s <- d %>%
-#     select(v1, v2, rho) %>%
-#     bind_rows(select(., v1 = v2, v2 = v1, rho)) %>%
-#     arrange(v2) %>%
-#     spread(v2, rho) %>%
-#     arrange(v1) %>%
-#     select(-v1) %>%
-#     as.matrix() %>% unname()
-#   diag(df) <- 1
-#   R_s= m
-#   # warn if the sample correlation matrix is not positive-definite
-#   eigs <- eigen(R_s)
-#   if (min(eigs$values) < median(abs(R_s)) * 2^(-6)) {
-#     warning("Sample correlation matrix is far from positive definite.")
-#   }
-#   # partial correlation matrix
-#   if (use.shrinkage) {
-#     R_p <- corpcor::cor2pcor(corpcor::cor.shrink(R_s))
-#   } else {
-#     #R_p <- psych::partial.r(R_s)
-#     R_p <- -(solve(R_s))
-#     diag(R_p) <- 1 / (1 - psych::smc(R_s))
-#     R_p <- cov2cor(R_p)
-#   }
-#   Z_p <- .5 * log((1 + R_p) / (1 - R_p))
-#   dp <- tibble(
-#     v1 = factor(rep(vars, times = ncol(R_p)), levels = vars),
-#     v2 = factor(rep(vars, each = nrow(R_p)), levels = vars),
-#     rho_partial = as.vector(R_p),
-#     rho_partial_Z = as.vector(Z_p)
-#   )
-#   # augment with confidence intervals
-#   d <- d %>%
-#     left_join(dp, by = c("v1", "v2")) %>%
-#     mutate(
-#       rho_partial_Z_lower = rho_partial_Z - z / sqrt(n - 3 - (v - 2)),
-#       rho_partial_Z_upper = rho_partial_Z + z / sqrt(n - 3 - (v - 2)),
-#       rho_partial_lower = (exp(2 * rho_partial_Z_lower) - 1) /
-#         (exp(2 * rho_partial_Z_lower) + 1),
-#       rho_partial_upper = (exp(2 * rho_partial_Z_upper) - 1) /
-#         (exp(2 * rho_partial_Z_upper) + 1)
-#     ) %>%
-#     select(-contains("_Z_"))
-#   # return data
-#   d
-# }
+

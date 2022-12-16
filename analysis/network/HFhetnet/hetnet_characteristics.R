@@ -27,7 +27,6 @@ library(org.Hs.eg.db)
 #get edge lists of hetnet layers:
 edge.list= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/output/multilayer_edge_list.rds")
 
-
 source("analysis/utils/utils_network.R")
 
 # add pubscore ------------------------------------------------------------
@@ -159,66 +158,101 @@ df= df %>%
   )
 
 # plot net sizes
-p1= ggplot(df%>% filter(feature %in% c("# nodes" )), aes(x= name, y= value))+
-  facet_grid(cols= vars(layer), scales = "free")+
-  geom_col(width= 0, colour= "black", lwd= 1)+
-  geom_point(size= 2)+
-  theme_bw()+
-  theme(axis.text.x = element_text(angle= 40, hjust= 1))+
+p1= ggplot(df%>% filter(feature %in% c("# nodes" )), aes(x= name, y= value, color= name))+
+  facet_grid(cols= vars(layer), scales = "free",space= "free")+
+  geom_col(width= 0, lwd= 1)+
+  geom_point(size= 3)+
+  scale_color_manual(values = c(cols.nice, "darkred"))+
+  scale_y_log10()+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle= 40, hjust= 1),
+        legend.position = "none")+
   labs(x= "", y= "# nodes")
 
-p2= ggplot(df%>% filter(feature %in% c("# edges" )), aes(x= name, y= value))+
-  facet_grid(cols= vars(layer), scales = "free")+
-  geom_col(width= 0, colour= "black", lwd= 1)+
-  geom_point(size= 2)+
-  theme_bw()+
-  theme(axis.text.x = element_text(angle= 40, hjust= 1))+
+
+p2= ggplot(df%>% filter(feature %in% c("# edges" )), aes(x= name, y= value, color= name))+
+  facet_grid(cols= vars(layer), scales = "free",space = "free")+
+  geom_col(width= 0, lwd= 1)+
+  #ylim(c(3,5))+
+  geom_point(size= 3)+
+  scale_color_manual(values = c(cols.nice, "darkred"))+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle= 40, hjust= 1),
+        legend.position = "none")+
   labs(x= "", y= "# edges")
-p3= ggplot(df%>% filter(feature %in% c("edge_density percent" )), aes(x= name, y= value))+
-  facet_grid(cols= vars(layer), scales = "free")+
-  geom_col(width= 0, colour= "black", lwd= 1)+
-  geom_point(size= 2)+
-  theme_bw()+
-  theme(axis.text.x = element_text(angle= 40, hjust= 1))+
+p2
+p3= ggplot(df%>% filter(feature %in% c("edge_density percent" )), aes(x= name, y= value, color= name))+
+  facet_grid(cols= vars(layer), scales = "free", space= "free")+
+  geom_col(width= 0, lwd= 1)+
+  geom_point(size= 3)+
+  scale_color_manual(values = c(cols.nice, "darkred"))+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle= 40, hjust= 1),
+        legend.position = "none")+
   labs(x= "", y= "edge_density")
 
-p4= ggplot(df%>% filter(feature %in% c("centrality degree" )), aes(x= name, y= value))+
-  facet_grid(cols= vars(layer), scales = "free")+
-  geom_col(width= 0, colour= "black", lwd= 1)+
-  geom_point(size= 2)+
-  theme_bw()+
-  theme(axis.text.x = element_text(angle= 40, hjust= 1))+
+p4= ggplot(df%>% filter(feature %in% c("centrality degree" )), aes(x= name, y= value, color= name))+
+  facet_grid(cols= vars(layer), scales = "free", space= "free")+
+  geom_col(width= 0,  lwd= 1)+
+  geom_point(size= 3)+
+  scale_color_manual(values = c(cols.nice, "darkred"))+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle= 40, hjust= 1),
+        legend.position = "none")+
   labs(x= "", y= "centrality")
 
-p5= ggplot(df%>% filter(feature %in% c("transitivity global" )), aes(x= name, y= value))+
-  facet_grid(cols= vars(layer), scales = "free")+
-  geom_col(width= 0, colour= "black", lwd= 1)+
-  geom_point(size= 2)+
-  theme_bw()+
-  theme(axis.text.x = element_text(angle= 40, hjust= 1))+
+p5= ggplot(df%>% filter(feature %in% c("transitivity global" )), aes(x= name, y= value, color= name))+
+  facet_grid(cols= vars(layer), scales = "free", space= "free")+
+  geom_col(width= 0,lwd= 1)+
+  geom_point(size= 3)+
+  scale_color_manual(values = c(cols.nice, "darkred"))+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle= 40, hjust= 1),
+        legend.position = "none")+
   labs(x= "", y= "transitivity")
 
 
-p6= ggplot(df%>% filter(feature %in% c("pubmed_correlation" )), aes(x= name, y= value))+
-  facet_grid(cols= vars(layer), scales = "free")+
-  geom_col(width= 0, colour= "black", lwd= 1)+
-  geom_point(size= 2)+
-  theme_bw()+
-  theme(axis.text.x = element_text(angle= 40, hjust= 1))+
+p6= ggplot(df%>% filter(feature %in% c("pubmed_correlation" )), aes(x= name, y= value, color= name))+
+  facet_grid(cols= vars(layer), space= "free", scales = "free")+
+  geom_col(width= 0, lwd= 1)+
+  geom_point(size= 3)+
+  scale_color_manual(values = c(cols.nice[c(1,2,5)], "darkred"))+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle= 40, hjust= 1),
+        legend.position = "none")+
   labs(x= "", y= "pubmed_corr")
 
-p6= cowplot::plot_grid(NULL, p6, ncol = 2)
+p6= cowplot::plot_grid(NULL, unify_axis(p6), ncol = 2, rel_widths = c(1, 2))
 
-p7= ggplot(df%>% filter(feature %in% c("degree_assortativity global" )), aes(x= name, y= value))+
-  facet_grid(cols= vars(layer), scales = "free")+
-  geom_col(width= 0, colour= "black", lwd= 1)+
-  geom_point(size= 2)+
-  theme_bw()+
-  theme(axis.text.x = element_text(angle= 40, hjust= 1))+
+p7= ggplot(df%>% filter(feature %in% c("degree_assortativity global" )), aes(x= name, y= value, color= name))+
+  facet_grid(cols= vars(layer), scales = "free", space= "free")+
+  geom_col(width= 0, lwd= 1)+
+  geom_point(size= 3)+
+  scale_color_manual(values = c(cols.nice, "darkred"))+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle= 40, hjust= 1),
+        legend.position = "none")+
   labs(x= "", y= "degree_assort")
-cowplot::plot_grid(p1,p2,p3,p4,p5 ,p7,p6, ncol = 2)
+
+
+pdf("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/figures/supp/hetnet/graph_layer_feat.pdf",
+    height= 7,
+    width= 9)
+
+cowplot::plot_grid(unify_axis(p1),
+                   unify_axis(p2),
+                   unify_axis(p3),
+                   unify_axis(p4),
+                   unify_axis(p5),
+                   unify_axis(p7),
+                   unify_axis(p6),
+                   ncol = 3)
+dev.off()
+
 
 df2= df%>% dplyr::filter(feature %in% c("# edges","# nodes","edge_density percent", "centrality degree","transitivity global", "pubmed_correlation"))
+
+
 
 ggplot(df2, aes(x= name, y= value))+
   facet_grid(cols= vars(feature), scales = "free")+

@@ -26,7 +26,7 @@ source("~/GitHub/hf_comorbidity_genes/analysis/utils/utils_network.R")
 source("~/GitHub/hf_comorbidity_genes/analysis/utils/utils.R")
 
 dd.net= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/networks/comorbidity/hfnet.rds")
-data = readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/ICD10_labeled_phe.rds")
+data = readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/ICD10_labeled_phe2022.rds")
 pids.list= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/cohort_pids/hf_types_pids.rds")
 link.data= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/networks/comorbidity/link_data.rds")
 
@@ -35,7 +35,7 @@ phe_dic= link.data$phe_dic
 ## CAVE: when calculating shortest path with igraph, or other metrics that rely on edge weights.
 # weights can be interpreted as "costs", i.e. high weight is high distance between two nodes.
 # create weight inverted net
-x= E(dd.net.inv)$weight
+x= E(dd.net)$weight
 
 E(dd.net)$weight.inv = abs(max(x)-x)+0.00001
 range(E(dd.net)$weight)
@@ -87,63 +87,31 @@ dev.off()
 #calculate ANOVAs p-value
 sapply(c( "size", "degree", "strength", "cc", "btw", "closeness"), function(x){
   print(x)
-  anova= aov(formula = as.formula(paste0(x, " ~ category")), data =centrality.df)
-  summary(anova)[[1]][["Pr(>F)"]][1]
+  #anova= aov(formula = as.formula(paste0(x, " ~ category")), data =centrality.df)
+  kruskal.test(formula = as.formula(paste0(x, " ~ category")), data =centrality.df)$p.value
+  #summary(anova)[[1]][["Pr(>F)"]][1]
+
 })
+
 
 summary(anova)[[1]][["Pr(>F)"]][1]
 
 cor.test(df$size, df$strength)
-p.degree=
-  ggplot(centrality.df, aes(x= size, y= degree, col = category))+
-  geom_point()+
-  labs(x= "log10 count")
-p.degree
-
-p.degree=
-  ggplot(centrality.df, aes(x= size, y= closeness, col = category))+
-  geom_point()+
-  labs(x= "log10 count")
-p.degree
+p.cent= centrality.df %>% filter(category!= "NULL")%>%
+  pivot_longer(cols= c(closeness, btw, degree, size, cc),
+               names_to = "metric",
+               values_to = "value")%>%
+  ggplot(., aes(x= category, y= value))+
+    geom_boxplot()+
+    facet_grid(rows= vars(metric), scales= "free_y")+
+  theme_bw()+
+  theme(axis.text.x = element_text(angle= 45, hjust = 1))
 
 
-ggplot(centrality.df, aes(x= size, y= closeness))+
-  geom_point()+
-  theme(axis.text.x = element_text(angle= 60, hjust= 1))
-
-
-p.dis.cats= plot_grid(
-  ggplot(centrality.df, aes(x= category, y= closeness))+
-  geom_boxplot()+
-  theme(axis.text.x = element_text(angle= 60, hjust= 1))+
-    labs(x= ""),
-
- ggplot(centrality.df, aes(x= category, y= size))+
-   geom_boxplot()+
-   theme(axis.text.x = element_text(angle= 60, hjust= 1))+
-   labs(x= "",
-        y= ""),
-
-ggplot(centrality.df, aes(x= category, y= degree))+
-  geom_boxplot()+
-  theme(axis.text.x = element_text(angle= 60, hjust= 1))+
-  labs(x= ""),
-
-ggplot(centrality.df, aes(x= category, y= btw))+
-  geom_boxplot()+
-  theme(axis.text.x = element_text(angle= 60, hjust= 1))+
-  labs(x= ""),
-
-ggplot(centrality.df, aes(x= category, y= cc))+
-  geom_boxplot()+
-  theme(axis.text.x = element_text(angle= 60, hjust= 1))+
-  labs(x= ""),
-nrow = 3
-)
 pdf("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/figures/supp/node_feature_cats.pdf",
-    height = 10,
-    width = 8)
-p.dis.cats
+    height = 9,
+    width = 7)
+unify_axis(p.cent)+labs(y= "")
 dev.off()
 
 hist(centrality.df$degree, breaks= 50)
@@ -222,7 +190,7 @@ df.m%>% filter(Freq<0.241)
 
 # check highes ranked nodes -----------------------------------------------
 
-write.csv(centrality.df,  "output/Supp_tables/node_features.csv")
+write.csv(centrality.df,  "output/Supp_tables/Supplement_table_1_centrality_rankings.csv")
 centrality.df %>% arrange(desc(btw))%>% print(n=400)
 centrality.df %>% arrange(desc(degree))
 

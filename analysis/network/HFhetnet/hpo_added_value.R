@@ -20,7 +20,7 @@
 
 # -------------------------------------------------------------------------
 
-data = readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/data_output/ICD10_labeled_phe.rds")
+data = readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/ICD10_labeled_phe2022.rds")
 
 auc_res= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/data_output/aurocs_multilayer_disease_pred.rds")
 random.df= readRDS( "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/output/randomization_layer_dd_df.rds")

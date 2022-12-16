@@ -196,7 +196,7 @@ p1= ggplot(data= comp_feat, aes(x= estimate, y= importance, color = category))+
   # #scale_y_log10()+
   labs(color = "Disease category")+
   theme_minimal()+
-  theme(panel.border = element_rect(colour = "black", fill=NA, size=1))+
+  #theme(panel.border = element_rect(colour = "black", fill=NA, size=1))+
   labs(x= "Elastic net parameter",
        y= "RF importance")
 
@@ -222,7 +222,7 @@ unify_axis(p2)
 
 p.df= comp_feat%>%
   #filter(PheCode %in% c(hfpef[1:25], hfref[1:25]))%>%
-  filter(PheCode %in%feat.vector[1:100])%>%
+  filter(PheCode %in%feat.vector[1:50])%>%
   mutate(hf= ifelse(estimate<0, "HFpEF", "HFrEF"))
 
 p3.1= p.df %>%
@@ -266,16 +266,16 @@ mod %>% filter(importance> cut_off)
 median(rf_full_cross$variables$importance)
 
 pdf("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/figures/main/classifier_features.pdf",
-    width= 7,
+    width= 4,
     height= 8
     )
 unify_axis(p2)
-unify_axis(p1)
+unify_axis(p1)+theme(axis.text.x = element_text(angle= 45, hjust= 1))
 dev.off()
 
-pdf("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/figures/main/classifier_feature_numb.pdf",
+pdf("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/figures/main/classifier_feature_numb50.pdf",
     width= 7,
-    height= 13
+    height= 8
 )
 unify_axis(p3)
 
@@ -332,14 +332,28 @@ p1= comp_feat%>% filter(PheCode  %in% feat.vector[1:100])%>%
                          x = label2))+
   geom_bar(position = "fill", stat = "identity")+
   scale_fill_manual(values= col_vector)+
-  theme_minimal()+
-  theme(panel.border = element_rect(size= 1, fill= NA))+
+  theme_bw()+
+  #theme(panel.border = element_rect(size= 1, fill= NA))+
   labs(x= "",y= "%", fill  = "")
 
 unify_axis(p1)
 
 x= comp_feat%>% filter(estimate != 0)%>% arrange(estimate)%>%
   mutate(label2= ifelse(estimate>0, "HFrEF", "HFpEF"))
+
+#check for relative contribution to estimats
+df1= comp_feat%>% filter(PheCode  %in% feat.vector[1:100])%>%
+  mutate(label2= ifelse(estimate>0, "HFrEF", "HFpEF"))
+
+df1 %>% group_by(
+                 label2)%>%
+  summarise(s= sum(abs(estimate)) )
+
+df1 %>% group_by(category,
+                 label2)%>%
+  summarise(s= sum(abs(estimate)) )%>%
+  mutate(s.= ifelse(label2== "HFpEF", s/25.4, s/11))
+
 
 
 x2= table(x$label2, x$category)
@@ -359,10 +373,245 @@ p3= t(x2)%>%as.data.frame()%>%
   theme(panel.border = element_rect(size= 1, fill= NA))+
   labs(x= "",y= "%", fill  = "")
 pdf("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/figures/main/feature_distribution.pdf",
-    width= 4,
+    width= 3.5,
     height= 5
 )
-unify_axis(p1)
+unify_axis(p1)+theme(axis.text.x= element_text(angle= 45, hjust=1 ))
 unify_axis(p2)
 unify_axis(p3)
-dev.off()
+
+
+
+# Check classifier for dc 1 &6 --------------------------------------------
+
+
+mod_df= table_to_model_frame(data)
+mod_df= add_response_variable(mod_df)
+
+library(igraph)
+
+cl.= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/networks/comorbidity/hfnet.rds")
+se= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/full_clinic_info.rds")
+sum.t= readRDS(file = "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/patient_metadata_2022.rds")
+
+net= igraph::as_data_frame(cl. , "vertices")%>% as_tibble()
+dc.6= net %>% filter(group_louv== 6)%>% pull(name)
+dc.1= net %>% filter(group_louv== 1)%>% pull(name)
+
+fit_LR_subset= function(dc, mod_df){
+  mod_df2= mod_df[,c("hf", dc)]
+
+  f.p =sum.t %>% filter(sex== "f")%>% pull(pid)
+  m.p= sum.t %>%filter(sex== "m")%>% pull(pid)
+
+  mod_df2= mod_df2 %>% rownames_to_column("pid")  %>%
+    mutate(sex = ifelse(pid %in% f.p,"f","u"),
+           sex = ifelse(pid %in% m.p,"m",sex))%>%
+    filter(sex %in% c("m", "f"))%>%
+    mutate(sex= factor(sex, levels= c("f", "m"))) %>%
+    mutate(hf= factor(hf, levels= c("hfpef", "hfref")))
+
+  mod_df2= column_to_rownames(.data = mod_df2, var = "pid")
+
+  colnames(mod_df2)= paste0("x", colnames(mod_df2))
+  form  = paste(x =   unlist(colnames(mod_df2)[-1]), collapse= "+")
+
+  fit = glm(formula= as.formula(paste0("xhf ~ ", form)),
+            data = mod_df2,
+            family= "binomial")
+}
+
+x= fit_LR_subset(dc.6, mod_df)
+x2= fit_LR_subset(dc.1, mod_df)
+
+diseases= dc.6
+
+clusts= unique(net$group_louv)
+
+p.estimates= map(clusts, function(y){
+  #print(y)
+  diseases= net %>% filter(group_louv== y)%>% pull(name)
+
+  x= fit_LR_subset(diseases, mod_df)
+
+  df= map(diseases, function(x){
+    #print(x)
+    f= fit_LR_subset(x, mod_df)
+    coef(summary(f))
+  })
+  names(df)= diseases
+
+  tag = map(df, function(x){
+    x[2,4]
+  })%>%
+    unlist() %>%
+    enframe(., value = "p_val")
+
+  tag2 = map(df, function(x){
+    x[2,1]
+  })%>% unlist()%>% enframe(., value = "estimate")
+
+  df= tag %>% left_join(tag2)%>%
+    left_join(Phe_dic %>%
+                rename(name= PheCode))%>%
+    mutate(cluster= y)
+
+
+})
+
+
+comp_feat= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/output/HFpEF_classifier_features.rds")
+labels= comp_feat %>% arrange(desc(abs(estimate)))%>% slice(1:100)%>% pull(Phenotype)
+labels= c("Neoplasm of uncertain behavior of breast",
+          "Hypertensive heart disease" ,
+
+          #"Atherosclerosis"                                            ,
+           "Viral infection"                                            ,
+           "Chronic pericarditis"                                       ,
+           #"Postmenopausal bleeding",
+          "Osteopenia",
+          "Pulmonary heart disease",
+          #"Valvular heart disease/ heart chambers",
+          "Renal failure NOS",
+          "Rheumatoid arthritis",
+          #"Diseases of white blood cells" ,
+          "Hypercholesterolemia",
+          "Sleep apnea"                 ,
+           "Cardiogenic shock"  ,
+           "Mitral valve disease"   ,
+          #"Secondary malignant neoplasm of digestive systems",
+          "Inflammatory and toxic neuropathy" ,
+              "Arrhythmia (cardiac) NOS" ,
+          "Chronic renal failure [CKD]" ,
+          "Type 2 diabetes" ,
+          "Essential hypertension"   ,
+          "Coronary atherosclerosis" ,
+          #"Pericarditis" ,
+          "Myocardial infarction"  ,
+          #"Acquired hypothyroidism",
+          "Ventricular fibrillation and flutter",
+          #"Hyperparathyroidism"      ,
+          "Tobacco use disorder"
+
+
+
+
+
+
+
+
+)
+
+plot.df= do.call(rbind,p.estimates) %>%
+  mutate(p_val= p.adjust(p_val, "BH"))%>%
+  mutate(sig= ifelse(p_val<0.001, "<0.001",
+                     ifelse(p_val<0.01, "<0.01",
+                            ifelse(p_val<0.05, "<0.05", "ns")
+                            )
+                     ),
+         sig= factor(sig, levels=c("<0.001", "<0.01", "<0.05", "ns")),
+         label = ifelse(Phenotype %in% labels, Phenotype, "")
+         )
+
+
+library(ggrepel)
+
+p.distro=
+plot.df%>%mutate(dummy= 1)%>%
+  ggplot(., aes(y=  estimate,
+                x= as.factor(cluster),
+                fill=  as.factor(cluster),
+                #
+                label= label))+
+
+  geom_hline(yintercept = 0, lty= 2)+
+  geom_jitter(aes(col = sig), size= 3)+
+  geom_boxplot(alpha= 0.9, width= 0.3, outlier.colour  = NA)+
+  #scale_color_manual(values = rev(c("darkgrey", "#AA1430", "black", "#D62747")))+
+  scale_color_manual(values = c("black",cols.nice[1:3]))+
+  scale_fill_manual(values = col.set)+
+  #facet_grid(cols= vars(cluster))+
+  theme_bw()
+  #scale_fill_gradient(low= "black" , high =  "yellow")+
+  geom_label_repel(aes(label= label),
+                   alpha= 0.8 ,
+                   size= 3,
+                   max.overlaps = 100)
+  coord_flip()
+
+  # theme(axis.text.x  = element_blank(),
+  #       axis.title.x = element_blank())
+
+  map(clusts, function(x){
+    pos <- position_jitter(width = 0.3, seed = 2)
+    plot.df%>%mutate(dummy= 1)%>%
+      filter(cluster== x)%>%
+      ggplot(., aes(y=  estimate,
+                    x= dummy,
+                    fill=  as.factor(cluster),
+                    #
+                    label= label))+
+
+      geom_hline(yintercept = 0, lty= 2)+
+      geom_jitter(aes(col = sig), size= 3, position = pos)+
+      geom_boxplot(alpha= 0.9, width= 0.3, outlier.colour  = NA)+
+      #scale_color_manual(values = rev(c("darkgrey", "#AA1430", "black", "#D62747")))+
+      scale_color_manual(values = c("black",cols.nice[1:3]))+
+      scale_fill_manual(values = col.set)+
+      #facet_grid(cols= vars(cluster))+
+      theme_bw()+
+      #scale_fill_gradient(low= "black" , high =  "yellow")+
+      geom_label_repel(aes(label= label),
+                       alpha= 0.8 ,
+                       size= 3,
+                       max.overlaps = 100, position = pos)
+
+
+  })
+
+
+  plot.df%>%mutate(dummy= 1)%>%
+    ggplot(., aes(y=  estimate,
+                  x= dummy,
+                  fill=  as.factor(cluster),
+                  #
+                  label= label))+
+
+    geom_hline(yintercept = 0, lty= 2)+
+    geom_jitter(aes(col = sig), size= 3, position = pos)+
+    geom_boxplot(alpha= 0.9, width= 0.3, outlier.colour  = NA)+
+    #scale_color_manual(values = rev(c("darkgrey", "#AA1430", "black", "#D62747")))+
+    scale_color_manual(values = c("black",cols.nice[1:3]))+
+    scale_fill_manual(values = col.set)+
+    facet_grid(cols= vars(cluster))+
+    theme_bw()+
+  #scale_fill_gradient(low= "black" , high =  "yellow")+
+  geom_label_repel(aes(label= label),
+                   alpha= 0.8 ,
+                   size= 3,
+                   max.overlaps = 100, position = pos)
+  coord_flip()
+
+  # theme(axis.text.x  = element_blank(),
+  #       axis.title.x = element_blank())
+
+
+
+
+
+
+
+  plot.df%>%
+    ggplot(., aes(x= reorder(Phenotype,estimate),
+                  y= estimate,
+                  col= sig,
+                  label= label))+
+    geom_point()+
+    scale_color_manual(values = rev(c("darkgrey", "#AA1430", "#E45570", "#D62747")))+
+    scale_fill_gradient(low= "black" , high =  "yellow")+
+    facet_grid(cols= vars(cluster))+
+    theme_minimal()+
+    theme(axis.text.x  = element_blank(),
+          axis.title.x = element_blank())+
+    geom_hline(yintercept = 0)+
+    geom_label_repel(aes(label= label))

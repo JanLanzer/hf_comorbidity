@@ -19,13 +19,26 @@
 library(RandomWalkRestartMH)
 library(tidyverse)
 library(ComplexHeatmap)
+library(ggrepel)
+library(circlize)
+library(cowplot)
+library(igraph)
+
 
 source("analysis/utils/utils_hetnet.R")
 
 edge.list= readRDS( "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/output/multilayer_edge_list.rds")
 
-ML.class= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/output/HFpEF_classifier_features.rds")
+#ML.class= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/output/HFpEF_classifier_features.rds")
+comp_feat= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/output/HFpEF_classifier_features.rds")
 
+feat.vector= comp_feat%>% filter(estimate!= 0) %>% arrange(desc(abs(estimate))) %>%
+  pull(PheCode)
+
+comp_feat= comp_feat%>% filter(PheCode  %in% feat.vector[1:100])
+
+
+# get gene ranking for hfpef and hfref nodes ------------------------------
 
 
 
@@ -42,25 +55,24 @@ PPI_Disease_Net <- create.multiplexHet(ppi_net_multiplex,
 PPIHetTranMatrix <- compute.transition.matrix(PPI_Disease_Net)
 
 
-# get gene ranking for hfpef and hfref nodes ------------------------------
-ML.class= ML.class %>% mutate(hf = ifelse(importance>0 & estimate< -0.2, "hfpef",
-                                          ifelse(importance>0 & estimate>0.2, "hfref", "ns")
+ML.class= comp_feat %>% mutate(hf = ifelse( estimate< 0, "hfpef",
+                                          ifelse(estimate>0, "hfref", "ns")
                                           )
                               )
 
 seed.hfpef= ML.class %>% filter(hf=="hfpef")%>% pull(PheCode)
+#tau.hfpef= ML.class %>% filter(hf=="hfpef")%>% pull(estimate)%>% abs()
+#tau.hfpef2= tau.hfpef/sum(tau.hfpef)
 seed.hfref= ML.class %>% filter(hf=="hfref")%>% pull(PheCode)
-
-Phe_dic%>% filter(PheCode %in% seed.hfref)
-
-# main_disease= c("585.3", "401.1", "440", "272.13", "250.2", "296.22", "496",
-#                 "280.1","327.3","411.4")
+#tau.hfref= ML.class %>% filter(hf=="hfref")%>% pull(estimate)
+#tau.hfref2= tau.hfref/sum(tau.hfref)
 
 g.hfpef <-
   Random.Walk.Restart.MultiplexHet(x= PPIHetTranMatrix,
                                    MultiplexHet_Object = PPI_Disease_Net,
                                    Multiplex1_Seeds= c(),
                                    Multiplex2_Seeds = seed.hfpef,
+                                   #tau2= tau.hfpef2,
                                    r=0.8)
 
 g.hfref <-
@@ -68,6 +80,7 @@ g.hfref <-
                                    MultiplexHet_Object = PPI_Disease_Net,
                                    Multiplex1_Seeds= c(),
                                    Multiplex2_Seeds = seed.hfref,
+                                   #tau2= tau.hfref2,
                                    r=0.8)
 
 
@@ -80,31 +93,7 @@ g.hfref= g.hfref$RWRMH_Multiplex1 %>%
   rename(value= Score,
          name= NodeNames)%>% as_tibble()
 
-# plots -------------------------------------------------------------------
-
-sets= load_validation_genes(disgenet_value= 0.29)
-sets$set_phe= NULL
-sets$set_reheat= NULL
-sets$set_reheat_up= sets$set_reheat_up[1:250]
-val.set= unique(unlist(sets))
-length(unique(unlist(sets)))
-
-pef= sapply(sets, function(x){
-  res = validate_results2(x, g.hfpef)
-  c("PR_AUC"= res$pr$auc.integral,
-    "AUROC" =res$roc$auc)
-})
-ref= sapply(sets, function(x){
-  res = validate_results2(x, g.hfref)
-  c("PR_AUC"= res$pr$auc.integral,
-    "AUROC" =res$roc$auc)
-})
-
-ref["HF"]= rep("HFrEF",2)
-
-
-rbind(pef, ref)%>% Heatmap()
-
+#
 # PLOT RANKS --------------------------------------------------------------
 
 g.pef= g.hfpef %>% mutate(rank= rank(desc(value)))
@@ -119,263 +108,161 @@ g.ranks= full_join(g.pef, g.ref, by= "name") %>%
          RW.value.hfref= value.y) %>%
   mutate(hfref.prio= RW.value.hfref * -rank.diff,
          hfpef.prio= RW.value.hfpef * rank.diff)
-# get top candidates:
+
+#get gene names
+gene.names= read.csv(url("https://www.genenames.org/cgi-bin/download/custom?col=gd_hgnc_id&col=gd_app_sym&col=gd_app_name&col=gd_status&col=gd_prev_sym&col=gd_aliases&col=gd_pub_chrom_map&col=gd_pub_acc_ids&col=gd_pub_refseq_ids&status=Approved&status=Entry%20Withdrawn&hgnc_dbtag=on&order_by=gd_app_sym_sort&format=text&submit=submit"),
+                     sep= "\t")%>%
+  as_tibble()%>%
+  rename(gene= Approved.symbol,
+         gene.name= Approved.name)%>%
+  select(gene, gene.name)
+
+g.ranks= g.ranks%>%
+  rename(gene= name)%>%
+  left_join(gene.names)%>%
+  mutate(rank.hfpef.prio= rank(desc(hfpef.prio)),
+         rank.hfref.prio= rank(desc(hfref.prio)))%>%
+  select(gene, gene.name, everything())
+
+# save results
 
 saveRDS(g.ranks, file = "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/output/HF_gene_ranks.rds")
 g.ranks= readRDS( file = "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/output/HF_gene_ranks.rds")
 
-saveRDS(list(g.hfpef, g.hfref), file = "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/output/HF_gene_ranks2.rds")
+saveRDS(list("hfpef"= g.hfpef,
+             "hfref"= g.hfref), file = "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/output/HF_gene_ranks2.rds")
+
 g.list= readRDS( file = "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/output/HF_gene_ranks2.rds")
 
+# as .csv
 g.ranks %>% write.csv(., file = "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/output/predicted_HF_genes.csv")
+g.ranks %>% arrange(desc(hfpef.prio))%>% filter(grepl("PPA", gene))
 
+# use HF genesets for comparison -------------------------------------------------------------------
 
-top_n = 50
+## use HF genesets
+sets= load_validation_genes(disgenet_value= 0.29)
+names(sets)= c("DisGeNET", "PheWAS", "Kegg_DCM", "ReHeaT", "r2", "Cardiomyopathy", "Top_single_variants", "Top_common_variants")
+sets= sets[-5]
+sets$Top_single_variants
+sets$Top_common_variants
+val.set= unique(unlist(sets))
+length(unique(unlist(sets)))
 
-g.pef.top= g.ranks %>% arrange(desc(hfpef.prio))%>% slice(1:top_n) %>% pull(name)
-g.ref.top= g.ranks %>% arrange(desc(hfref.prio))%>% slice(1:top_n) %>% pull(name)
+#calc overlap
+df= sapply(sets, function(x){
+  sapply(sets, function(y){
+    #length(intersect(x,y))/length(union(x,y))
+    x = prop.table(table(x %in% y))[1]
+    as.numeric(x)
+  })
+})
+rownames(df) = colnames(df)
+diag(df)= NA
+df= 1-df
 
-p.full.ranks= g.ranks %>% ggplot(., aes(x= rank.hfpef, y= rank.hfref))+
-  geom_point()
-
-library(ggrepel)
-
-## PLOT RW PROBs
-p.ef = ggplot(g.pef, aes(x= rank,y= value))+
-  geom_point()+
-  theme_classic()+
-  geom_vline(xintercept = 250, col= "darkgrey")+
-  labs(x= "gene ranking hfpef",
-       y= "RW probability")+
-  ggtitle("HFpEF")
-
-p.ef
-
-p.ref = ggplot(g.ref, aes(x= rank,y= value))+
-  geom_point()+
-  theme_classic()+
-  geom_vline(xintercept = 250, col= "darkgrey")+
-  labs(x= "gene ranking hfref",
-       y= "RW probability")+
-  ggtitle("HFrEF")
-
-p.ref
-
-p.cutoff= plot_grid(p.ef, p.ref, labels = "AUTO")
-
-pdf("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/figures/supp/hetnet/gene.rankings.RW.prob.pdf",
-    height= 5,
-    width= 8)
-p.cutoff
-dev.off()
-
-############ plot pef and ref gene candidates
-
-p.pef.top250 =
-  g.ranks %>%
-  filter(rank.hfpef<500)%>%
-  mutate(label = ifelse(name %in% g.pef.top, name, ""),
-         col= ifelse(rank.diff >500, "yes", "no")) %>%
-  ggplot(., aes(x= rank.hfpef,
-                y= rank.hfref,
-                col= hfpef.prio))+
-  geom_point()+
-  geom_abline(slope =1, intercept = 0)+
-  geom_abline(slope =1, intercept = 500, col= "darkgrey")+
-  #geom_hline( yintercept = log10(100), type = 2, color= "grey")+
-  labs(x= "ranking hfpef",
-       y= "ranking hfref",
-       col ="RW probability * \n ranking difference")+
-  #geom_text_repel(aes(label= label ), box.padding = 2, max.overlaps = 50,show.legend = FALSE)+
-  theme_classic()+
-  scale_color_gradient(low= "darkgrey", high= "blue")+
-  theme(axis.text = element_text(size= 14))+
-  ggtitle("HFpEF Ranking top 250")
-
-p.pef.top250
-
-p.pef.top100 = g.ranks %>%
-  filter(rank.hfpef<200)%>%
-  mutate(label = ifelse(name %in% g.pef.top, name, ""),
-         col= ifelse(rank.diff >500, "yes", "no")) %>%
-  ggplot(., aes(x= rank.hfpef,
-                y= rank.hfref,
-                col= col))+
-  geom_point()+
-  geom_abline(slope =1, intercept = 0)+
-  geom_abline(slope =1, intercept = 500, col= "darkgrey")+
-  #geom_hline( yintercept = log10(100), type = 2, color= "grey")+
-  labs(x= "ranking hfpef",
-       y= "ranking hfref",
-       col ="ranking difference \n >500")+
-  geom_text_repel(aes(label= label ), box.padding = 2, max.overlaps = 50,show.legend = FALSE)+
-  theme_classic()+
-  theme(axis.text = element_text(size= 14))+
-  ggtitle("HFpEF Ranking top 100")
-
-p.pef.top250
-p.pef.top100
-
-p.pef.HFgenes = g.ranks %>%
-  filter(rank.hfpef<250)%>%
-  mutate(label = ifelse(name %in% val.set, name, ""),
-         label2 = ifelse(!name %in% val.set, "other", "hf"),
-         col= ifelse(rank.diff >500, "yes", "no")) %>%
-  ggplot(. ,aes(x= rank.hfpef,
-                y= rank.hfref,
-                col= label2))+
-  geom_point( size= 2)+
-  scale_color_manual(values= cols.nice[c(1,4)])+
-  geom_abline(slope =1, intercept = 0)+
-  geom_abline(slope =1, intercept = 500, col= "darkgrey")+
-  labs(x= "ranking hfpef",
-       y= "ranking hfref",
-       col ="HF gene set")+
-  geom_text_repel(aes(label= label ), box.padding = 2, max.overlaps = 50,show.legend = FALSE)+
-  theme_classic()
-
-p.pef.HFgenes
-
-pdf("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/figures/manuscript/main/HFpEF.gene.rankings.dg2.pdf",
-    height= 8,
-    width= 12)
-
-p.pef.top100
-p.pef.top250
-p.pef.HFgenes
-
-dev.off()
-
-########## Plot same for ref
-
-p.ref.top250 = g.ranks %>%
-  filter(rank.hfref<250)%>%
-  mutate(label = ifelse(name %in% g.ref.top, name, ""),
-         col= ifelse(rank.diff < (-500), "yes", "no")) %>%
-  ggplot(., aes(x= rank.hfref,
-                y= rank.hfpef,
-                col= col))+
-  geom_point()+
-  geom_abline(slope =1, intercept = 0)+
-  geom_abline(slope =1, intercept = 500, col= "darkgrey")+
-  #geom_hline( yintercept = log10(100), type = 2, color= "grey")+
-  labs(x= "ranking hfref",
-       y= "ranking hfpef",
-       col ="ranking difference \n >500")+
-  geom_text_repel(aes(label= label ), box.padding = 2, max.overlaps = 50,show.legend = FALSE)+
-  theme_classic()+
-  theme(axis.text = element_text(size= 14))+
-  ggtitle("HFrEF Ranking top 250")
-
-p.ref.top100 = g.ranks %>%
-  filter(rank.hfref<100)%>%
-  mutate(label = ifelse(name %in% g.ref.top, name, ""),
-         col= ifelse(rank.diff < (-500), "yes", "no")) %>%
-  ggplot(., aes(x= rank.hfref,
-                y= rank.hfpef,
-                col= col))+
-  geom_point()+
-  geom_abline(slope =1, intercept = 0)+
-  geom_abline(slope =1, intercept = 500, col= "darkgrey")+
-  #geom_hline( yintercept = log10(100), type = 2, color= "grey")+
-  labs(x= "ranking hfref",
-       y= "ranking hfpef",
-       col ="ranking difference \n >500")+
-  geom_text_repel(aes(label= label ), box.padding = 2, max.overlaps = 50,show.legend = FALSE)+
-  theme_classic()+
-  theme(axis.text = element_text(size= 14))+
-  ggtitle("HFrEF Ranking top 100")
-
-p.ref.top250
-p.ref.top100
-
-p.ref.HFgenes = g.ranks %>%
-  filter(rank.hfref<250)%>%
-  mutate(label = ifelse(name %in% val.set, name, ""),
-         label2 = ifelse(!name %in% val.set, "other", "hf"),
-         col= ifelse(rank.diff >(-500), "yes", "no")) %>%
-  ggplot(. ,aes(x= rank.hfref,
-                y= rank.hfpef,
-                col= label2))+
-  geom_point( size= 2)+
-  scale_color_manual(values= cols.nice[c(1,4)])+
-  geom_abline(slope =1, intercept = 0)+
-  geom_abline(slope =1, intercept = 500, col= "darkgrey")+
-  labs(x= "ranking hfref",
-       y= "ranking hfpef",
-       col ="HF gene set")+
-  geom_text_repel(aes(label= label ), box.padding = 2, max.overlaps = 50,show.legend = FALSE)+
-  theme_classic()
-
-p.ref.HFgenes
-
-pdf("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/figures/manuscript/main/HFrEF.gene.rankings.dg2.pdf",
-    height= 8,
-    width= 12)
-
-p.ref.top100
-p.ref.top250
-p.ref.HFgenes
-
+hmap.lap= Heatmap(df,
+        row_names_side = "left",
+        name= "% geneset (column)\nin geneset (row)",
+        cluster_rows = F,
+        cluster_columns = F)
+pdf(file = "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/figures/supp/hetnet/HF_geneset_overlap.pdf",
+    width= 5,
+    height= 4)
+hmap.lap
 dev.off()
 
 
-p.ref.HFgenes2 = g.ranks %>%
-  filter(rank.hfref<250)%>%
-  mutate(label = ifelse(abs(rank.diff)<50, name, ""),
-         label2 = ifelse(!name %in% val.set, "other", "hf"),
-         col= ifelse(rank.diff >(-500), "yes", "no")) %>%
-  ggplot(. ,aes(x= rank.hfref,
-                y= rank.hfpef,
-                col= label2))+
-  geom_point( size= 2)+
-  scale_color_manual(values= cols.nice[c(1,4)])+
-  geom_abline(slope =1, intercept = 0)+
-  geom_abline(slope =1, intercept = 500, col= "darkgrey")+
-  labs(x= "ranking hfref",
-       y= "ranking hfpef",
-       col ="HF gene set")+
-  geom_text_repel(aes(label= label ), box.padding = 2, max.overlaps = 50,show.legend = FALSE)+
-  theme_classic()
 
-p.ref.HFgenes2
-# compare network modules -------------------------------------------------
+pef= sapply(sets, function(x){
+  res = validate_results2(set = x, gene_results = g.list[[1]])
+  c("PR_AUC"= res$pr$auc.integral,
+    "AUROC" =res$roc$auc)
+})
+ref= sapply(sets, function(x){
+  res = validate_results2(x, g.list[[2]])
+  c("PR_AUC"= res$pr$auc.integral,
+    "AUROC" =res$roc$auc)
+})
+
+#ref$HF= rep("HFrEF",2)
 
 
-monet= readRDS( "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/output/gene.modules.MONET.M1.rds")
 
-names(monet)= paste0("c.", seq(1:length(monet)))
+###
+roc.df%>%
+  ggplot(aes(x= value , y= as.factor(validation_genes)))+
+  geom_point()+
+  geom_boxplot()+
+  #theme(axis.text. = element_blank())+
+  coord_flip()
 
-monet_length= lapply(monet, length)
+###
+df= rbind(pef, ref)
+#rownames(df) = c("HFpEF_PR_AUC", "HFpEF_AUROC",  "HFrEF_PR_AUC", "HFrEF_AUROC" )
+rownames(df) = c("HFpEF", "HFpEF",  "HFrEF", "HFrEF" )
 
-names.5= names(monet_length[unlist(map(monet_length,function(x)(x>5)))])
+col_fun = colorRamp2(c(0, 0.1, 0.5, 1), c("white", "blue", "red", "darkred"))
+df%>% t() %>% Heatmap(name = "value")
 
-enframe(monet, name= "cluster", value= "name")%>%
-  unnest(name)
+map_genes=Heatmap(t(df),
+                  name = "AUC",
+                  #col = col_fun,
+                  top_annotation = HeatmapAnnotation(foo = anno_block(labels = c("AUC-PR", "AUROC") , gp = gpar(fill = 2))),
+                  column_km = 2,
+                  cell_fun = function(j, i, x, y, width, height, fill) {
+                    grid.text(sprintf("%.3f", t(df)[i, j]), x, y, gp = gpar(fontsize = 10))},
+                  cluster_columns = F,
+                  show_row_dend = F
+)
 
-after_clustering =
-  g.ranks %>%
-  left_join(enframe(monet, name= "cluster", value= "name")%>%
-              unnest(name))%>% print(n=100)
-
-after_clustering%>%
-  arrange(desc(hfpef.prio))
-
-t= after_clustering%>% group_by(cluster)%>% mutate(mean_diff= median(hfpef.prio))%>%
-  filter(cluster %in% names.5)
-
-t%>% arrange(desc(mean_diff)) %>% distinct(cluster, mean_diff) %>% print(n=100)
-
-
-after_clustering %>% filter(cluster==  "c.373")%>% print(n=100)
-
-
-t%>% distinct(cluster, mean_diff) %>% arrange(desc(mean_diff))%>% print(n=500
-                                                                        )
-after_clustering%>% filter(grepl("ANGP", name))
-g.ranks %>%
-  arrange(desc(hfpef.prio)) %>% slice(1:50)
+pdf(file = "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/figures/main/HF_geneset_recovery.pdf",
+    width= 4.1,
+    height= 4)
+print(map_genes)
+dev.off()
 
 
+
+
+#do wilcox paired
+df= rbind(pef, ref)
+rownames(df) = c("HFpEF_PR_AUC", "HFpEF_AUROC",  "HFrEF_PR_AUC", "HFrEF_AUROC" )
+
+df2= t(df)%>%
+  as.data.frame()%>%
+  rownames_to_column("set") %>% as_tibble()%>%
+  pivot_longer(c(HFpEF_AUROC , HFrEF_AUROC), names_to = "name", values_to = "AUC")
+
+
+library(ggpubr)
+p.AUROCS.paired=
+  ggpaired(df2,
+           x= "name", id= "set", y = "AUC",
+           color = "black", line.color = "gray", line.size = 0.5  ,
+           linetype =1  ,point.size = 3
+            )+
+  geom_point(aes(color= set))+
+  stat_compare_means(paired = TRUE, method = "wilcox.test")+
+  labs(x= "Condition",
+       y= "AUROC")
+
+p.AUROCS.paired
+
+## the AUROC might be repeated for the hfpef prio vector
+
+do_auc_on_vec= function(gg, col, sets){
+  gg= gg %>% rename("value" := !!(col))
+
+  res= sapply(sets, function(x){
+    res = validate_results2(x, gg)
+    c("PR_AUC"= res$pr$auc.integral,
+      "AUROC" =res$roc$auc)
+  })
+
+}
+
+pef= do_auc_on_vec(gg,"hfpef.prio", sets)
+ref= do_auc_on_vec(gg,"hfref.prio", sets)
 
 

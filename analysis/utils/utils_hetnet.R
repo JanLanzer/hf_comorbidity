@@ -1,6 +1,6 @@
 ## UTIL  funcs for creating het net
 # load additional data
-patients =readRDS(file = "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/data_output/time_range_patientIDs.rds")
+#patients =readRDS(file = "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/data_output/time_range_patientIDs.rds")
 HF_allcause= c("I11.0", "I13.0", "I13.2", "I25.5", "I42.0", "I42.5", "I42.8", "I42.9", "I50.0", "I50.1", "I50.9")
 
 
@@ -312,10 +312,10 @@ process_morbinet= function(){
   morbinet= read.csv("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/data_other/Databases/morbinet_edges.csv")
 
   # translate icd3 to PheCode
-  morbinet= morbinet %>% left_join(data %>% distinct(PheCode, icd3) %>%
+  morbinet= morbinet %>% left_join(data %>% dplyr::distinct(PheCode, icd3) %>%
                                      rename(PheCode_A = PheCode,
                                             Disease_A= icd3), by= "Disease_A") %>%
-    left_join(data %>% distinct(PheCode, icd3) %>% rename(PheCode_B = PheCode,
+    left_join(data %>% dplyr::distinct(PheCode, icd3) %>% rename(PheCode_B = PheCode,
                                                           Disease_B= icd3), by= "Disease_B") %>% as_tibble()
   ## disease disease edges
   dd_edges = morbinet %>%filter(OR>2) %>% rename(nodeA= PheCode_A,
@@ -640,7 +640,7 @@ simplify_link_table= function(links, type = "d-d"){
 # validation mapping functions --------------------------------------------
 
 
-randomize_links_by_layer= function(links){
+randomize_links_by_layer= function(links, rewireprob= 0.9){
 
   .gX= graph_from_data_frame(links, directed= F)
 
@@ -648,17 +648,17 @@ randomize_links_by_layer= function(links){
   #E(g.rand)$weight_sc= runif(length(E(g.rand)), 0,1)
   E(g.rand)$weight= sample(E(.gX)$weight)
 
-  g.rand2= rewire(.gX, with = each_edge(prob= 0.9))
+  g.rand2= rewire(.gX, with = each_edge(prob= rewireprob))
   E(g.rand2)$weight= sample(E(.gX)$weight)
 
   return(list(
     "random.degree"= igraph::as_data_frame(g.rand, "edges") %>%
-      rename(nodeA= from,
+      dplyr::rename(nodeA= from,
              nodeB= to) %>%
       arrange(desc(weight_sc)) %>%
       as_tibble(),
     "random.complete"= igraph::as_data_frame(g.rand2, "edges")%>%
-      rename(nodeA= from,
+      dplyr::rename(nodeA= from,
              nodeB= to)%>%
       arrange(desc(weight_sc))%>%
       as_tibble(),
@@ -793,8 +793,8 @@ load_validation_genes = function(disgenet_value= 0.4, top_reheat= 500){
 
   #genes phe=
   phecode = read.csv("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/data_other/Databases/phewas-catalog.csv")
-  phewas_hflinks= as_tibble(phecode)%>% filter(grepl("428", phewas.code)) #%>% filter(gene_name %in% V(g1)$name)
-
+  phewas_hflinks= as_tibble(phecode)%>% filter(grepl("428", phewas.code))%>%
+    filter(p.value<0.05, odds.ratio>1)
 
   kegg_DCM = c("LMNA", "CDCD1", "CDDC", "CMD1A", "CMT2B1", "EMD2", "FPL", "FPLD", "FPLD2", "HGPS",
                "IDC", "LDP1", "LFP", "LGMD1B", "LMN1", "LMNC", "LMNL1", "MADA", "PRO1")
@@ -903,6 +903,7 @@ validate_results2= function(set, gene_results){
 
   pr= pr.curve(scores.class0 = roc.df%>% filter(validation_genes== 1) %>% pull(value),
                scores.class1 = roc.df%>% filter(validation_genes== 0) %>% pull(value),
+               sorted = T,
                curve =T)
 
   roc= roc.curve(scores.class0 = roc.df%>% filter(validation_genes== 1) %>% pull(value),
@@ -933,7 +934,7 @@ validate_results_partial= function(set, gene_results, FPR_cutoff= 0.015){
   roc.df= gene_results %>%
     arrange(desc(value)) %>%
     mutate(validation_genes = ifelse(name %in% set, 1, 0)) %>%
-    mutate(rank= rank(desc(value)))
+    mutate(rank= rank(dplyr::desc(value)))
 
   print("number of genes with FPR_cutoff")
   print(dim(roc.df)[1] *FPR_cutoff)
@@ -950,7 +951,10 @@ validate_results_partial= function(set, gene_results, FPR_cutoff= 0.015){
               # arguments for ci
               ci=TRUE, boot.n=100, ci.alpha=0.9, stratified=FALSE,
               # arguments for plot
-              plot=TRUE, auc.polygon=TRUE, max.auc.polygon=TRUE, grid=TRUE,
+              plot=FALSE,
+              auc.polygon=TRUE,
+              max.auc.polygon=TRUE,
+              grid=TRUE,
               print.auc=TRUE, show.thres=TRUE)
 
   pAUROC= as.numeric(roc4$auc)
@@ -966,7 +970,7 @@ validate_results_partial= function(set, gene_results, FPR_cutoff= 0.015){
               # arguments for ci
               ci=TRUE, boot.n=100, ci.alpha=0.9, stratified=FALSE,
               # arguments for plot
-              plot=TRUE, auc.polygon=TRUE, max.auc.polygon=TRUE, grid=TRUE,
+              plot=FALSE, auc.polygon=TRUE, max.auc.polygon=TRUE, grid=TRUE,
               print.auc=TRUE, show.thres=TRUE)
 
   ### median rank stat:

@@ -13,7 +13,7 @@
 ## ---------------------------
 ##
 ## Notes:
-##  HPO ontology is used to i
+##  HPO ontology is used to to generat
 ##
 ## ---------------------------
 
@@ -31,13 +31,13 @@ icd_pheno_map= read.delim("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/da
 
 phemaps= read.delim("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/data_other/Databases/HPO/HPO_to_phecode.txt")%>% as_tibble()
 
-data = readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/ICD10_labeled.rds")
-Phe_dic = data %>% distinct(entry_value, icd3, icd4, PheCode)
+data = readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/ICD10_labeled_phe2022.rds")
+Phe_dic = data %>% distinct(entry_value  , icd3, icd4, PheCode)
 
+link.data= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/networks/comorbidity/link_data.rds")
 # Subset HPO to disease net ----------------------------------------------------------
 
-.links= readRDS( file ="T:/fsa04/MED2-HF-Comorbidities/lanzerjd/data_output/"
-phecodes =unique(c(.links$disease1, .links$disease2))
+phecodes =unique(c(link.data$links$disease1, link.data$links$disease2))
 
 relevant_diseases= Phe_dic %>% filter(PheCode %in% phecodes)
 
@@ -49,8 +49,9 @@ mapped_codes_filt= mapped_codes%>%
   drop_na()#%>%
   filter(HPO.ID %in% hpo$id)
 
-information_content <- descendants_IC(hp)
-
+class(hpo)
+information_content <- descendants_IC(hpo)
+?descendants_IC
 dis_phe_sets= split( mapped_codes_filt$HPO.ID, mapped_codes_filt$PheCode)
 
 sim_mat <- get_sim_grid(ontology=hpo,
@@ -70,7 +71,7 @@ E(full_hpo_net)$weight= longformat$sim
 
 full_hpo_net  = simplify(full_hpo_net, remove.multiple = T, remove.loops = T)
 
-hpo_net= backbone_filter(full_hpo_net)
+hpo_net= backbone_filter(full_hpo_net, alpha = 0.05)
 
 saveRDS(hpo_net,"T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/output/hpo_net.rds" )
 
@@ -83,7 +84,9 @@ mapped_codes= data %>% distinct(PheCode, Phenotype, entry_value)%>% drop_na%>%
   filter(HPO.ID %in% hpo$id)
 
 information_content <- descendants_IC(hpo)
+
 dis_phe_sets= split( mapped_codes$HPO.ID, mapped_codes$PheCode)
+
 sim_mat <- get_sim_grid(ontology=hpo,
                         term_sets=dis_phe_sets,
                         information_content = information_content,

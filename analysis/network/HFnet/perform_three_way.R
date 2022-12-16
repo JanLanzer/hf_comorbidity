@@ -23,6 +23,7 @@ library(cowplot)
 library(RANKS)
 library(RandomWalkRestartMH)
 
+source("~/GitHub/hf_comorbidity_genes/analysis/utils/utils.R")
 source("~/GitHub/hf_comorbidity_genes/analysis/utils/utils_network.R")
 source("~/GitHub/hf_comorbidity_genes/analysis/utils/utils_pairwise_disease.R")
 source("~/GitHub/hf_comorbidity_genes/analysis/utils/utils_hetnet.R")
@@ -49,13 +50,22 @@ dd_links= create_edge_table_for_cohorts(data = data,
                                         topn_disease = 0,
                                         phecodes = phecodes )
 
+links.hfpef= create.links(pids= hf.pids.list$hfpef,
+                     phecodes = phecodes,
+                     data= data)
+links.hfref= create.links(pids= hf.pids.list$hfref,
+                          phecodes = phecodes,
+                          data= data)
+links.hfref%>% filter(!is.finite(odds.ratio))
+
+
+
 
 saveRDS(dd_links,"T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/networks/comorbidity/links_threeway.rds" )
 dd_links= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/networks/comorbidity/links_threeway.rds" )
 dd_hfnet= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/networks/comorbidity/link_table_hf_cohort.rds" )
 
 # Functions  -----------------------------------
-
 
 
 # perform Breslow Day test:
@@ -207,11 +217,40 @@ hfpef.hfref= get_breslow_disease_links(dd_links$links$hfref,
                           dd_links$links$hfpef,
                           name1= ".hfref",
                           name2= ".hfpef"
+
                           )
 
+hfpef.hfref= get_breslow_disease_links(links.hfpef,
+                                       links.hfref,
+                                       name1= ".hfref",
+                                       name2= ".hfpef",
+                                       alpha.fisher = 0.0001
+                                       )
+
 saveRDS(hfpef.hfref, "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/output/three_way_obj.rds")
+hfpef.hfref= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/output/three_way_obj.rds")
+
+
+#correlated:
+cor.test(hfpef.hfref$odds.ratio.hfpef[is.finite(hfpef.hfref$odds.ratio.hfpef)],
+         hfpef.hfref$odds.ratio.hfref[is.finite(hfpef.hfref$odds.ratio.hfref)])
+
+prop.table(table(hfpef.hfref$sig.comb))
 
 p.= visualize_test_results(sig.links = hfpef.hfref)
+p.$plot.all
+
+
+p.1= hfpef.hfref %>%
+  filter(odds.ratio.hfpef< 10000000)%>% # remove one outlier for plotting
+  ggplot(., aes(x= log10(odds.ratio.hfpef), y= log10(odds.ratio.hfref), col= sig.comb))+
+  geom_point(alpha= 0.8)+
+  scale_color_manual(values = cols.nice)+
+  theme_minimal()+
+  theme(panel.border = element_rect(colour = "black", fill=NA, size=1))+
+  labs(col = "Significant\nin cohort:")
+
+
 
 pcomb.= plot_grid(p.$plot.all+
             theme_minimal(),
@@ -243,7 +282,7 @@ p.heat= df.breslow2 %>%
   arrange(p.bres.adj) %>%
   mutate(log.p= -log10(p.breslow+0.0000001))%>%
   filter(p.bres.adj<0.01) %>%
-  mutate(label = paste0(dis1_phenotype.hfref, "+", '\n', dis2_phenotype.hfref))%>%
+  mutate(label = paste0(dis1_phenotype.hfref, "+",  dis2_phenotype.hfref))%>%
   dplyr::rename(hfpef= odds.ratio.hfpef,
                 hfref= odds.ratio.hfref)%>%
   pivot_longer(cols = c(hfpef, hfref), names_to = "cohort", values_to = "odds.ratio")%>%
@@ -269,15 +308,17 @@ p.hist= df.breslow2 %>%
   labs(y= "-log10 p-value")
 
 pdf("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/figures/supp/breslow.hmap.pdf",
-    width= 7.5,
-    height= 15)
-plot_grid(p.heat, p.hist, rel_widths = c(1, 0.3))
+    width= 10,
+    height= 10)
+plot_grid(unify_axis(p.heat),
+          unify_axis(p.hist),
+          rel_widths = c(1, 0.1))
 dev.off()
 
 pdf("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/figures/supp/pairwise_disease/breslow.OR.comp.pdf",
     width= 8,
     height= 4)
-pcomb.
+unify_axis(p.1)+coord_equal()
 dev.off()
 
 
@@ -285,23 +326,3 @@ dev.off()
 #save all
 df.breslow2 %>%
   write.csv2("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/data_output/manuscript/diseasenet/link.table.breslow.hfpef.hfref.csv")
-
-#1) we are using only significant different disease pairs based on breslow
-#2) now we use fisher exact significant pairs that are only significant in one or the other cohort
-#3) for those pairs that display significance in both cohorts, we assign based on the higher odds.ratio:
-sig.hfref= df.breslow2 %>% filter(abs(log10(odds.ratio.hfref)) > abs(log10(odds.ratio.hfpef))) %>%
-  write.csv2("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/data_output/manuscript/diseasenet/link.table.breslow.hfref.csv")
-sig.hfpef= df.breslow2 %>% filter(abs(log10(odds.ratio.hfpef)) > abs(log10(odds.ratio.hfref))) %>%
-  write.csv2("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/data_output/manuscript/diseasenet/link.table.breslow.hfpef.csv")
-
-#explore and plot top comorbidities in HFpEF vs HFrEF
-# x hfref
-# y hfpef
-sig.x %>% arrange(p.breslow) %>%
-   filter((sig2 == "sig.x+y" & (odds.ratio.x > odds.ratio.y)))%>%
-  select(dis1_phenotype.y, dis2_phenotype.x)
-sig.y %>% arrange(p.breslow) %>%
-  filter((sig2 == "sig.x+y" & (odds.ratio.x < odds.ratio.y)))%>%
-  select(dis1_phenotype.y, dis2_phenotype.x, everything())
-
-

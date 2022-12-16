@@ -17,19 +17,18 @@
 ##   Validation script of disease prediction
 ## ---------------------------
 source("analysis/utils/utils.R")
+source("analysis/utils/utils_hetnet.R")
 
-data = readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/data_output/ICD10_labeled_phe.rds")
-pids.list= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/data_output/pidslist_oct2021.rds")
+library(tidyverse)
+
+data = readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/ICD10_labeled_phe2022.rds")
+pids.list= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/cohort_pids/hf_types_pids2022.rds")
 edge.list = readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/output/multilayer_edge_list.rds")
-auc_res= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/output/aurocs_multilayer_disease_pred_heart_genenet.rds")
-
+auc_res= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/output/aurocs_multilayer_disease_pred_heart_genenet2022.rds")
 
 Phe_dic= data %>% distinct(PheCode, Phenotype, category) %>% drop_na
 
-auc_res$`010`$test_geneset_coverage
-
 # plot precision recall ---------------------------------------------------
-
 
 df1 = map(auc_res, function(x){
   x[[1]]$pr$auc.integral
@@ -43,8 +42,6 @@ p.pr = df1 %>% ggplot(., aes(x= category, y= value))+
 
 
 uff= df %>% filter(value >0.99)%>% pull(PheCode)
-
-
 
 gd= process_gd(weight_cutoff = 0.29)
 gd%>% arrange(nodeB)
@@ -115,9 +112,6 @@ p.pauroc.c= df4 %>% ggplot(., aes(x= category, y= value))+
 cowplot::plot_grid(p.fullAUROC,p.median_rank, p.pauroc.c, p.pr)
 
 
-auc_res$`427.2`
-
-
 
 # combine plots ------------------------------------------------------------
 df = rbind(df1%>% mutate(metric = "AUC-PR"),
@@ -138,12 +132,20 @@ p.all
 
 df %>% group_by(metric)%>% summarise(median(value))
 df %>% filter(category== "circulatory system")%>% group_by(metric)%>% summarise(median(value))
+
 pdf("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/figures/main/int_val_results.pdf",
     width = 4, height= 5)
-p.all
+unify_axis(p.all)
 dev.off()
 
-p.categories= df %>% ggplot(., aes(x= category, y= value))+
+df %>% pivot_wider(names_from= metric, values_from= value)%>%
+  ggplot(aes(x= AUROC, y=   `AUC-PR`))+
+  geom_point()
+
+
+df= df%>% mutate(category= ifelse(category== "NULL","symptoms", category ))
+p.categories= df %>%filter(metric != "pAUROC")%>%
+  ggplot(., aes(x= category, y= value))+
   facet_grid(rows= vars(metric), scales = "free")+
   #geom_violin()+
   geom_boxplot(width=0.5)+
@@ -155,9 +157,22 @@ p.categories= df %>% ggplot(., aes(x= category, y= value))+
         axis.text.x= element_text(angle= 60, hjust= 1))
 
 pdf("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/figures/main/int_val_results_category.pdf",
-    width = 6, height= 5)
-p.categories
+    width = 4, height= 5)
+unify_axis(p.categories)
 dev.off()
+
+
+df%>%
+  group_by(category, metric)%>%
+  summarise(m.v= median(value))%>%
+  pivot_wider(names_from = metric, values_from = m.v)%>%
+  arrange(desc(AUROC))%>%
+  ungroup()%>%
+  mutate(AUROC.r= rank(desc(AUROC )),
+         AUCPR.r= rank(desc(`AUC-PR`)),
+         medianrank.r= rank(median_rank),
+         s.r= AUROC.r+AUCPR.r+medianrank.r)%>%
+  arrange(desc(s.r))
 
 
 # assess correlation of prediciton performance with patient number --------
@@ -187,7 +202,7 @@ pat.cor= df %>% left_join(pat.counts, by= "PheCode")%>%
 gd= edge.list$disease_gene %>% group_by(nodeB)%>% summarise(m.weight= median(weight),
                                        mean.weight= mean(weight))
 
-complete= left_join(df, gd %>% rename(PheCode= nodeB), by= "PheCode")
+complete= left_join(df, gd %>% dplyr::rename(PheCode= nodeB), by= "PheCode")
 
 disgenet.cor= complete%>%
  ungroup() %>%
@@ -203,12 +218,12 @@ p.cors= rbind(dis.cor, pat.cor,disgenet.cor)%>%
   ggplot(., aes(x= metric, y= rho , size = -log10(p), col= significant))+
   facet_grid(rows = vars(test))+
   geom_point()+
+  ylim(c(-0.4, 0.4))+
   geom_hline(yintercept = 0, color= "darkgrey")+
   labs(x= "")+
   theme_bw()+
   theme(axis.text = element_text(size=11, color="black"))
 
-dev.off()
 
 p.cors
 pdf("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/figures/supp/hetnet/int_val_correlations.pdf",
@@ -222,9 +237,22 @@ rbind(dis.cor, pat.cor,disgenet.cor)%>%
   filter(metric != "pAUROC")%>%
   ggplot(., aes(x= ))
 
-# rest --------------------------------------------------------------------
+# test category dependence --------------------------------------------------------------------
 
 
+df2= df%>%
+  pivot_wider(names_from = metric, values_from = value)%>%
+  arrange(desc(AUROC))%>%
+  ungroup()
+df2
+df
+
+kruskal.test(AUROC ~ category, data = df2)
+kruskal.test(median_rank  ~ category, data = df2)
+kruskal.test(`AUC-PR`  ~ category, data = df2)
+
+
+####
 
 df.cor= gd %>% filter(nodeB %in% disease_to_predict) %>% group_by(nodeB)%>%
   count() %>% rename(PheCode= nodeB) %>% left_join(df)

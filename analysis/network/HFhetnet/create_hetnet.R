@@ -20,7 +20,6 @@
 
 
 source("~/GitHub/hf_comorbidity_genes/analysis/utils/utils.R")
-source("~/GitHub/HF_gene_mining/R/utils/utils.R")
 source("~/GitHub/hf_comorbidity_genes/analysis/utils/utils_network.R")
 source("~/GitHub/hf_comorbidity_genes/analysis/utils/utils_hetnet.R")
 
@@ -30,21 +29,23 @@ library(ggrepel)
 library(igraph)
 library(RandomWalkRestartMH)
 
-data = readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/ICD10_labeled_phe.rds")
-
-pids.list= readRDS(paste0(directory,"data/hf_cohort_data/cohort_pids/hf_types_pids.rds"))
-
 .links= readRDS( file ="T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/networks/comorbidity/link_table_hf_cohort_fil.rds")
+link.data= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/networks/comorbidity/link_data.rds")
 
-hpo_net= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/output/hpo_net.rds" )
+pids.list= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/ICD10_labeled_phe2022.rds")
+
+hpo_net= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/output/hpo_net_full.rds" )
 HFnet= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/networks/comorbidity/hfnet.rds")
-
+hpo_net= induced_subgraph(hpo_net, vids = V(hpo_net)$name %in% V(HFnet)$name)
 # test with gene pred: ----------------------------------------------------
 
 go =process_GO_layer("MF")
 goBP= process_GO_layer("BP")
 omni= process_omnipath()
+
 ppi= process_human_ppi_multiverse()
+ppi3= process_ppi_lit()
+ppi = rbind(ppi, ppi3)
 
 dg= process_gd(weight_cutoff = 0.29)
 
@@ -69,9 +70,10 @@ gene_networks= list("goMF"= go,
 gtex= get_GTEX_heart_genes()
 hprot= get_human_heart_proteome()
 reheat= as_tibble(read.csv("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/data_other/Databases/METArank_March2020.csv"))
+g.list= list("GTEX"= gtex, "Proteome"= hprot, "ReHeaT"= reheat%>% pull(gene))
 
 #plot:
-ggVennDiagram::ggVennDiagram(list("GTEX"= gtex, "Proteome"= hprot, "ReHeaT"= reheat%>% pull(gene)))
+ggVennDiagram::ggVennDiagram(g.list)
 
 #union
 hg= unique(c(gtex, hprot,reheat%>% pull(gene)))
@@ -118,6 +120,7 @@ dg_fil= dg %>% filter(nodeA %in% genes,
 
 length(unique(dg_fil$nodeA))
 length(unique(dg_fil$nodeB))
+
 saveRDS(list("gene"= gene_graphs,
              "disease"= list("heidelberg"= dd_net,
                              "hpo"= dd_net2),
@@ -131,39 +134,3 @@ PPI_Disease_Net <- create.multiplexHet(ppi_net_multiplex,
                                          as.data.frame(dg_fil[,c(1,2,3)]), "disease")
 
 PPIHetTranMatrix <- compute.transition.matrix(PPI_Disease_Net)
-
-RWRH_PPI_Disease_Results <-
-  Random.Walk.Restart.MultiplexHet(x= PPIHetTranMatrix,
-                                   MultiplexHet_Object = PPI_Disease_Net,
-                                   Multiplex1_Seeds= c(),
-                                   Multiplex2_Seeds = "hfpef",
-                                   r=0.8)
-
-
-RWRH_PPI_Disease_Results2 <-
-  Random.Walk.Restart.MultiplexHet(x= PPIHetTranMatrix,
-                                   MultiplexHet_Object = PPI_Disease_Net,
-                                   Multiplex1_Seeds= c(),
-                                   Multiplex2_Seeds = "hfref",
-                                   r=0.8)
-
-RWRH_PPI_Disease_Results3 <-
-  Random.Walk.Restart.MultiplexHet(x= PPIHetTranMatrix,
-                                   MultiplexHet_Object = PPI_Disease_Net,
-                                   Multiplex1_Seeds= c(),
-                                   Multiplex2_Seeds = "hfmref",
-                                   r=0.8)
-
-
-g.hfpef= RWRH_PPI_Disease_Results$RWRMH_Multiplex1 %>%
-  dplyr::rename(value= Score,
-         name= NodeNames)%>% as_tibble()
-
-g.hfref= RWRH_PPI_Disease_Results2$RWRMH_Multiplex1 %>%
-  dplyr::rename(value= Score,
-         name= NodeNames)%>% as_tibble()
-
-
-g.hfpef= RWRH_PPI_Disease_Results3$RWRMH_Multiplex1 %>%
-  dplyr::rename(value= Score,
-                name= NodeNames)%>% as_tibble()

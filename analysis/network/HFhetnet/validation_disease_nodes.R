@@ -43,15 +43,28 @@ genes = ppi_net_multiplex$Pool_of_Nodes
 
 dg = edge.list$disease_gene
 
+#get diseases with more than 2 genes
 disease_to_predict= dg %>% group_by(nodeB)%>% count %>% filter(n>2)%>% pull(nodeB)
 
 #plot the size of disgenet gene sets to predict:
 
 dg_fil = dg %>% filter(nodeB %in% disease_to_predict)
-dg_fil %>% group_by(nodeB)%>% count%>%mutate(dum= "x")%>%
+
+p_dg_size= dg_fil %>% group_by(nodeB)%>% count%>%mutate(dum= "DisGeNET")%>%
   ggplot(., aes(y= n, x= dum))+
   geom_violin()+
-  geom_boxplot()
+  geom_boxplot(width= 0.5)+
+  scale_y_log10()+
+  labs(x= "",
+       y= "gene set size")+
+  theme_minimal()
+
+
+pdf("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/figures/supp/hetnet/disgenet_geneset_size.pdf",
+    height= 3,
+    width= 2)
+unify_axis(p_dg_size)
+dev.off()
 
 # get diesease similarity map -------------------------------------------------------------------------
 
@@ -61,11 +74,20 @@ library(pheatmap)
 
 jacc.dist.phecodes= get_Disgenet_overlaps(dg_fil)
 
-p.disgenet.jacc= pheatmap(as.matrix(jacc.dist.phecodes), show_rownames = F, show_colnames = F, legend_labels = "Jac")
+p.disgenet.jacc= Heatmap(jacc.dist.phecodes,
+        name= "Jaccard Index",
+        show_row_dend = F,
+        show_column_names = F,
+        show_row_names = F)
+
+# p.disgenet.jacc= pheatmap(as.matrix(jacc.dist.phecodes),
+#                           show_rownames = F,
+#                           show_colnames = F,
+#                           legend_labels = "Jaccard Index")
 
 pdf("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/figures/supp/hetnet/disgenet_disease_distance.pdf",
-    height= 30,
-    width= 30)
+    height= 10,
+    width= 10)
 print(p.disgenet.jacc)
 dev.off()
 
@@ -142,10 +164,10 @@ auc_res= map(disease_to_predict, function(x){
                                      MultiplexHet_Object = PPI_Disease_Net,
                                      Multiplex1_Seeds= c(),
                                      Multiplex2_Seeds = x,
-                                     r=0.85)
+                                     r=0.8)
 
   g.test= RWRH_PPI_Disease_Results$RWRMH_Multiplex1 %>%
-    rename(value= Score,
+    dplyr::rename(value= Score,
            name= NodeNames)%>% as_tibble()
 
   test_res= validate_results_partial(set= test_genes, gene_results = g.test, FPR_cutoff = 0.02)
@@ -154,7 +176,7 @@ auc_res= map(disease_to_predict, function(x){
   dg_nodes = unique(dg_2$nodeA)
 
   gene_coverage_by_layer= enframe(test_genes, value = "name", name= "num")%>%
-    select(-num)%>%
+    dplyr::select(-num)%>%
     mutate(dg= ifelse(name %in% dg_nodes, 1, 0),
            goMF= ifelse(name %in% node.list.genes$goMF, 1, 0),
            PPI= ifelse(name %in% node.list.genes$PPI, 1, 0),
@@ -176,10 +198,8 @@ auc_res= map(disease_to_predict, function(x){
 names(auc_res)= disease_to_predict
 
 
-saveRDS(auc_res,"T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/output/aurocs_multilayer_disease_pred_heart_genenet.rds")
+saveRDS(auc_res,"T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/output/aurocs_multilayer_disease_pred_heart_genenet2022.rds")
 
-
-# -------------------------------------------------------------------------
 
 
 

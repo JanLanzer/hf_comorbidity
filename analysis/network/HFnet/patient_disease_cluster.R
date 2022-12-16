@@ -16,9 +16,15 @@
 ##
 ##  use disease cluster mapping to explore patient profiles
 ## ---------------------------
+
 library(tidyverse)
 library(igraph)
 library(ComplexHeatmap)
+library(ggpubr)
+library(rstatix)
+library(circlize)
+library(lubridate)
+
 
 source("analysis/utils/utils.R")
 
@@ -29,19 +35,34 @@ pids.list= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_c
 #link.data= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/networks/comorbidity/link_data2.rds")
 pids= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/cohort_pids/pids_endpoints.rds")
 
-c.info= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/full_clinic_info.rds")%>%
-  distinct(patient_id, sex)%>% filter(sex != "u")%>% mutate(sex= ifelse(sex=="m", "male", ifelse(sex=="f", "female", sex)))
+pid.df= read.csv( "T:/fsa04/MED2-HF-Comorbidities/data/RWH_September2022/raw/levinson_comorbidities_pids_2022-10-06.csv", sep = ";") %>%
+  as_tibble
 
 
-pids.interesting= list("hfpef"= pids.list$hfpef,
-                       "hfref"= pids.list$hfref,
-                       "hfmref"= pids.list$hfmref,
-                       "female"= c.info%>% filter(sex=="female")%>% pull(patient_id)%>% unique(),
-                       "male"= c.info%>% filter(sex=="male")%>% pull(patient_id)%>% unique()
+#add age calculation
+pid.df= pid.df  %>%
+  filter(pid %in% pids.list$hf_all)%>%
+  mutate(birthday= lubridate::as_date(birthday),
+         entry_date = lubridate::as_date(diag_date_min ),
+         ICDint = lubridate::interval(birthday, entry_date),
+         age.at.icd = ICDint/dyears(1)) %>%
+  select(pid, sex, age.at.icd)
+
+pids.interesting= list("HFpEF"= pids.list$hfpef,
+                       "HFrEF"= pids.list$hfref,
+                       "HFmrEF"= pids.list$hfmref,
+                       "Female"=pid.df %>% filter(sex=="f")%>% pull(pid)%>% unique(),
+                       "Male"= pid.df%>% filter(sex=="m")%>% pull(pid)%>% unique(),
+                       "40_60"= pid.df%>% filter(age.at.icd<60)%>% pull(pid)%>% unique(),
+                       "60_80"= pid.df%>% filter(age.at.icd>=60 & age.at.icd<=80)%>% pull(pid)%>% unique(),
+                       "80+"= pid.df%>% filter(age.at.icd>80)%>% pull(pid)%>% unique()
                        )
 
+map(pids.interesting, length)
 pids.interesting= c(pids.interesting, pids[names(pids)!= "htx"])
-names(pids.interesting)= c("HFpEF", "HFrEF", "HFmrEF", "Female", "Male", "Intubated", "Device.Implant", "PCI")
+names(pids.interesting)= c("HFpEF", "HFrEF", "HFmrEF", "Female", "Male", "40-60y","60-80y",
+                           "+80y", "Intubated",
+                           "Device.Implant", "PCI")
 
 node_df=igraph::as_data_frame(dd.net, "vertices")
 diseasecluster= split(node_df$name, node_df$group_louv)
@@ -82,101 +103,9 @@ node_sets_all= create_nodesets(pids.list = targetpids, data.red)
 
 
 
-# Get node centrality Df --------------------------------------------------
-
-#Page ranks
-pr= page_rank(dd.net, weights = E(dd.net)$weight)
-
-#pr$vector= scale(pr$vector)
-
-pr.frame= enframe(diseasecluster, name= "clust", value= "PheCode")%>% unnest(PheCode)%>%
-  left_join(enframe(pr$vector, name= "PheCode", value= "PR"),  by= "PheCode")%>%
-  group_by(clust)%>%
-  mutate(clust.sum= sum(PR))
-
-pr.frame
-
-#Degree centrality:
-str.frame= strength(dd.net, weights = E(dd.net)$weight)
-
-str.frame= enframe(diseasecluster, name= "clust", value= "PheCode")%>% unnest(PheCode)%>%
-  left_join(enframe(str.frame, name= "PheCode", value= "strength"),  by= "PheCode")%>%
-  group_by(clust)%>%
-  mutate(clust.sum= sum(strength))
-
-str.frame
-
-
-#network = enframe(node_sets_all,name= "pid", value= "PheCode")%>% unnest(PheCode)
-wsum= sapply(node_sets_all[names(node_sets_all) %in% pids.list$hf_all], function(x){
-  print(x)
-  map(unique(str.frame$clust),function(y){
-    print(y)
-    pr.frame.filt= str.frame %>% filter(clust== y)
-    prsum= pr.frame.filt %>% filter(PheCode %in% unlist(x))%>% pull(strength )%>% sum()
-    if(prsum== 0){
-      return(wsum= 0)}
-    else{
-      #total.sum= unique(pr.frame.filt$clust.sum)
-      total2= str.frame%>% filter(PheCode %in% unlist(x))%>% pull(strength )%>% sum()
-
-      wsum= prsum/(total2)
-    }
-  })%>% unlist()
-})%>% unlist()
-
-
-
-wsum.res= map(pids.list, function(x1){
-  wsum= sapply(node_sets_all[names(node_sets_all) %in% x1], function(x){
-    map(unique(str.frame$clust),function(y){
-      pr.frame.filt= str.frame %>% filter(clust== y)
-      prsum= pr.frame.filt %>% filter(PheCode %in% unlist(x))%>% pull(strength )%>% sum()
-      if(prsum== 0){
-        return(wsum= 0)}
-      else{
-        #total.sum= unique(pr.frame.filt$clust.sum)
-        total2= str.frame%>% filter(PheCode %in% unlist(x))%>% pull(strength )%>% sum()
-
-        wsum= prsum/(total2)
-      }
-    })%>% unlist()
-  })%>% unlist()
-})
-
-wsum.df= cbind(wsum.res$hfpef, wsum.res$hfref)
-
-wsum.s= apply(wsum.df, 1, scale)
-
-rownames(wsum.s)= colnames(wsum.df)
-colnames(wsum.s) = paste0("DC.", 1:dim(wsum.s)[2])
-wsum.s
-
-
-p.box= wsum.s %>%as.data.frame() %>% rownames_to_column("pid")%>%
-  as_tibble() %>%
-  mutate(pid= ifelse(pid %in% pids.list$hfpef,"hfpef", "hfref"))%>%
-  pivot_longer(-pid, names_to= "cluster", values_to= "scaled_jacc")
-
-p.box%>%
-  ggplot(., aes(x= cluster, y= scaled_jacc, fill = pid))+
-  geom_boxplot()
-
-hfpef= apply(wsum.s[colnames(wsum.res$hfpef),], 2, median)
-hfref= apply(wsum.s[colnames(wsum.res$hfref),], 2, median)
-
-saveRDS(wsum.s, "output/scaled_wsum_network_profiles.rds")
-
-
-Heatmap(rbind(hfpef,hfref), name = "mean scaled jaccard", rect_gp = gpar(col= "black"))
-
-
-
 # jaccard! ----------------------------------------------------------------
 
 targetpids= pids.list
-
-
 
 # calculate jaccard index of each patient with each cluster
 jaccs.res= map(pids.list, function(x){
@@ -197,12 +126,28 @@ jaccs_sc[1:9, 1:9]
 
 rownames(jaccs_sc)= colnames(jaccs.res$hf_all)
 
+t(jaccs.res$hf_all)%>% as.data.frame()%>% rownames_to_column("pid")%>%
+  pivot_longer(names_to= "DC", values_to= "jac", -pid)
+boxplot(t(jaccs.res$hf_all))
+
+boxplot(jaccs_sc)
+
 #tidy df
 
-jacc.df = t(jaccs_sc) %>%
-  as_tibble() %>%
+#jacc.df = t(jaccs_sc) %>%
+jacc.df = jaccs.res$hf_all %>%
+ as_tibble() %>%
   mutate(cluster= factor(names(diseasecluster),levels = names(diseasecluster)))%>%
   pivot_longer(-cluster)
+
+jacc.df.s = t(jaccs_sc) %>%
+  as_tibble() %>%
+  mutate(cluster= factor(names(diseasecluster),levels = names(diseasecluster)))%>%
+  pivot_longer(-cluster)%>%
+  dplyr::rename(value_scaled= value)
+
+jacc.df= jacc.df %>%
+  left_join(jacc.df.s)
 
 for (i in names(pids.interesting)){
   print(i)
@@ -211,40 +156,58 @@ for (i in names(pids.interesting)){
                          )
             )
 }
-library(ggpubr)
-library(rstatix)
-x= "HFpEF"
+
+## plot boxplots
+jacc.df %>%
+  mutate(age = ifelse(name %in% pids.interesting$`40-60y`, "40-60y", ""),
+         age = ifelse(name %in% pids.interesting$`60-80y`, "60-80y", age),
+         age = ifelse(name %in% pids.interesting$`+80y`, "80+y",age))%>%
+  ggplot(aes(x= cluster, y= value_scaled , fill = age ))+
+  geom_violin()+
+  geom_boxplot()
+
+jacc.df %>%
+  mutate(HF = ifelse(name %in% pids.interesting$HFpEF, "HFpEF", ""),
+         HF = ifelse(name %in% pids.interesting$HFrEF, "HFrEF", HF),
+         HF = ifelse(name %in% pids.interesting$HFmrEF, "HFmrEF",HF))%>%
+  filter(HF != "")%>%
+  ggplot(aes(x= cluster, y= value_scaled , fill = HF ))+
+  geom_violin()+
+  geom_boxplot()
+
+
 list.jaccs= lapply(names(pids.interesting), function(x){
   print(x)
   x= c(x, "cluster")
   df= jacc.df %>% group_by(across(all_of(x)))%>%
     summarise(mean= mean(value),
-              median= median(value))
+              median= median(value),
+              mean.s= mean(value_scaled),
+              median.s= median(value_scaled))
 
   colnames(df)[1]= "group"
   df
 
 })
 
-#calc p-values one vs all
-list.jaccs.pvals= lapply(names(pids.interesting), function(x){
-  print(x)
-
-  df= jacc.df %>%
-    group_by(cluster)%>%
-    pairwise_wilcox_test(as.formula(paste(" value ~ ", x)), p.adjust.method = "BH")
-
-
-})
-
+# #calc p-values one vs all
+# list.jaccs.pvals= lapply(names(pids.interesting), function(x){
+#   print(x)
+#
+#   df= jacc.df %>%
+#     group_by(cluster)%>%
+#     pairwise_wilcox_test(as.formula(paste(" value ~ ", x)), p.adjust.method = "BH")
+#
+#
+# })
 
 plot.df = do.call(rbind, list.jaccs)%>%
   filter(!group %in% c("n","htx"))%>%
   mutate(cluster = paste0("DC.", cluster))
 
 p1 = plot.df%>%
-  mutate(group= factor(group, levels= rev(c("HFpEF", "HFrEF", "HFmrEF", "Female", "Male", "Intubated", "Device.Implant", "PCI"))))%>%
-  ggplot(., aes(x= cluster,y= group , fill =mean))+
+  #mutate(group= factor(group, levels= rev(c("HFpEF", "HFrEF", "HFmrEF", "Female", "Male", "Intubated", "Device.Implant", "PCI"))))%>%
+  ggplot(., aes(x= cluster,y= group , fill =mean.s))+
   geom_tile(col= "darkgrey")+
   scale_fill_gradient(low= "white", high= "darkred")+
   theme_minimal()+
@@ -254,6 +217,7 @@ p1 = plot.df%>%
   coord_equal()
 
 
+p1
 
 pdf("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/figures/supp/comorbidity_net/jacc_patient_net_cluster.pdf",
     height = 5,
@@ -263,33 +227,163 @@ dev.off()
 
 
 
-plot.hmap= plot.df %>% filter(group!= "n") %>% pivot_wider(-median, names_from = cluster, values_from = mean)
-plot_h= column_to_rownames(plot.hmap, "group")
-Heatmap(plot_h[c("hfpef", "hfref"),], cluster_columns = T,rect_gp = gpar(col= "black"))
+plot.hmap= plot.df %>%
+  filter(group!= "n") %>%
+  select(-median, -median.s) %>%
+  pivot_wider(-mean,  names_from = cluster, values_from = mean.s)
 
-Heatmap(plot_h[,], cluster_columns = T,rect_gp = gpar(col= "black"))
+
+# plot.hmap= plot.df %>%
+#   filter(group!= "n") %>%
+#   select(-median, -median.s) %>%
+#   pivot_wider(-mean,  names_from = cluster, values_from = median.s)
+
+plot_h= column_to_rownames(plot.hmap, "group")
+
+top.c= igraph::as_data_frame(dd.net, "vertices")%>%
+  group_by(group_louv)%>%mutate(prev= 10^size)%>%
+  summarise(x= median(prev))
+
+top.c= jacc.df%>% group_by(cluster)%>%
+  summarise(m.c= mean(value))
+
+top.c
+
+column_ha = HeatmapAnnotation("prevalence" = anno_barplot(top.c$x))
+
+h1= Heatmap(plot_h[c("HFpEF", "HFrEF", "HFmrEF", "Male", "Female", "40-60y","60-80y", "+80y"),],
+            cluster_columns = F,
+            cluster_rows= F,
+            rect_gp = gpar(col= "black"),
+            split = c(rep("HF", 3), rep("Sex", 2), rep("Age", 3)),
+            #rect_gp = gpar(col= "darkgrey"),
+            name= "scaled\nJaccard\nIndex",
+            border= T,
+            gap = unit(0.5, "cm"),
+            top_annotation = column_ha    )
+
+h1
+
+pdf("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/figures/supp/comorbidity_net/jacc_patient_net_cluster2.pdf",
+    height = 3.5,
+    width=6)
+h1
+dev.off()
+
+range(plot_h)
+col_fun = colorRamp2(c(-0.2,0, 1.31), c("darkblue","white", "darkred"), space= "RGB", transparency = 0)
+max(plot_h)
+p_jaccard= Heatmap(as.matrix(plot_h),
+                   col= col_fun,
+                   cluster_columns = F,
+                   cluster_rows = F,
+                   #top_annotation = ha,
+                   row_names_side = "left",
+
+                   rect_gp = gpar(col= "darkgrey"),
+                   name= "sacled\nJaccard\nIndex")
+p_jaccard
+Heatmap(plot_h, cluster_columns = T,rect_gp = gpar(col= "black"))
 
 # run wilcox to test difference for each cluster between hfpef-hfref
 x= 1
+test.col1 = "80+"
+test.col2 = "60_80"
 unique(jacc.df$cluster)
-p.vals= map(unique(jacc.df$cluster), function(x){
-  print(x)
-  x1= jacc.df%>% filter(cluster== x, hfref=="hfref")%>% pull(value)
-  x2= jacc.df%>% filter(cluster== x, hfpef=="hfpef")%>% pull(value)
-  wilcox.test(x1, x2)$p.value
 
-})
-names(p.vals)= names(diseasecluster)
+run_wilcox= function(jacc.df, test.col1, test.col2, alpha.level= 0.01){
 
-enframe(p.vals)%>% mutate(value = unlist(value))%>% mutate(logp= -log10(value), sig = (value<0.1))
+  p.vals= map(unique(jacc.df$cluster), function(x){
+    #print(x)
+    unique(jacc.df[[test.col1]])
+    x1= jacc.df%>% filter(cluster== x, (!!sym(test.col1))==test.col1)%>% pull(value)
+    x2= jacc.df%>% filter(cluster== x, (!!sym(test.col2))==test.col2)%>% pull(value)
+    c("p.val"= wilcox.test(x1, x2)$p.value,wilcox.test(x1, x2, conf.int= T)$estimate)
 
-mat2= enframe(p.vals)%>%
-  mutate(value = unlist(value))%>%
-  mutate( p.adj= p.adjust(value, method= "BH"),
-          logp= -log10(p.adj),
-         sig = (p.adj<0.01))
+  })
+  p.vals[[1]]
+  enframe(p.vals) %>%
+    unnest_longer(value)%>%
+    pivot_wider(names_from = value_id, values_from = value)%>%
+    mutate(logp= -log10(p.val),
+           contrast=paste0(test.col1, " vs. ", test.col2))
 
 
+  # p.vals= enframe(p.vals)%>%
+  #   mutate(value = unlist(value),
+  #          p.value = p.adjust(value, "BH"))%>%
+  #   mutate(logp= -log10(p.value), sig = (p.value<alpha.level),
+  #          contrast=paste0(test.col1, " vs. ", test.col2))
+  # # p.vals %>%
+  # #   mutate(sig= ifelse(value<0.0001, "<1e-04",
+  # #                      ifelse(value<0.01,"<1e-02",
+  # #                             "ns")))
+}
+
+df1= run_wilcox(jacc.df,
+            test.col1 = "Female",
+           test.col2 = "Male")
+
+df2= run_wilcox(jacc.df,
+               "+80y",
+               "60-80y")
+
+df7= run_wilcox(jacc.df,
+                "+80y",
+                "40-60y")
+
+df3= run_wilcox(jacc.df,
+                "60-80y",
+               "40-60y")
+
+df4= run_wilcox(jacc.df,
+               "HFpEF",
+               "HFmrEF")
+
+df5= run_wilcox(jacc.df,
+                test.col1= "HFpEF",
+                test.col2= "HFrEF")
+
+df6= run_wilcox(jacc.df,
+                "HFmrEF",
+                "HFrEF")
+
+
+
+
+
+p.vals.compare= rbind(df1,df2,df3,df4,df5,df6)%>%
+  mutate(p.adj= adjust_pvalue(p.val, method= "BH"),
+         logp= -log10(p.adj),
+         sig = (p.adj<0.01),
+         s.effect= logp*sign(`difference in location` ),
+         name= paste0("DC.", name),
+         name= as.factor(name),
+         )
+
+p.p.vals= p.vals.compare%>%
+  ggplot(aes(x= name, y= s.effect, fill= name))+
+  geom_col()+
+  scale_fill_manual(values= c(cols.nice, "darkred", "darkblue", "darkgreen", "black" ))+
+  geom_hline(yintercept = c(-log10(0.01)), color= "darkgrey")+
+  geom_hline(yintercept = c(log10(0.01)), color= "darkgrey")+
+  #geom_hline(yintercept = c(-log10(0.00001)))+
+  facet_grid(rows = vars(contrast))+
+  theme_bw()+
+  labs(x= "",
+       y= "log10(adj.P) * sign of estimate",
+       fill = "")+
+  theme(axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        legend.position = "left")
+
+p.p.vals
+
+pdf("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/figures/supp/comorbidity_net/jacc_patient_net_cluster_pvals.pdf",
+    height = 12,
+    width=4)
+unify_axis(p.p.vals)
+dev.off()
 
 # ##run anovas when adding hfmref
 #
@@ -333,19 +427,22 @@ plot.hmap= plot.df %>% filter(group!= "n") %>% pivot_wider(-median, names_from =
 
 plot_h= column_to_rownames(plot.hmap, "group")
 
+t(as.matrix(scale(t(plot_h), center = F)))
 
 ha = HeatmapAnnotation(HFpEF_v_HFrEF =p.val.df$sig,
                        col= list(HFpEF_v_HFrEF= c("<1e-04"= cols.nice[1],
                                                   "<1e-02"=  cols.nice[2],
                                                   "ns"= "grey")))
-library(circlize)
-col_fun = colorRamp2(c(0,0.8,1.5), c("white","red", "darkred"))
+
+col_fun = colorRamp2(c(0,1.5), c("white","yellow", "darkred"))
 
 p_jaccard= Heatmap(as.matrix(plot_h),
-                   col= col_fun,
+                  col= col_fun,
         cluster_columns = F,
         cluster_rows = F,
-        top_annotation = ha,
+        #top_annotation = ha,
+        row_names_side = "left",
+
         rect_gp = gpar(col= "darkgrey"),
         name= "sacled\nJaccard\nIndex")
 
@@ -358,18 +455,62 @@ p_jaccard
 dev.off()
 
 
+# ORA? --------------------------------------------------------------------
+clust= 1
+col= "HFpEF"
+
+
+dfx= jacc.df %>% filter(cluster==clust)
+vec1= dfx$value
+names(vec1)= dfx$name
+
+vec1= sort(vec1, decreasing = T)
+list1= list("HFpEF"= dfx%>% filter(get(col)!= "n")%>% pull(name),
+            "HFrEF"= dfx%>% filter(HFrEF!= "n")%>% pull(name)
+)
+fgseaSimple(pathways =list1 ,
+            stats = vec1, nperm = 100, scoreType = "pos")
+
+plotEnrichment(list1$HFrEF, stats = vec1)
 # add disease signatures --------------------------------------------------
 
+names(diseasecluster)= paste0("DC.", names(diseasecluster))
 comp_feat= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/output/HFpEF_classifier_features.rds")
 
 
 hfref= comp_feat%>% arrange(desc(estimate))%>% pull(PheCode)
 hfpef= comp_feat%>% arrange((estimate))%>% pull(PheCode)
-dis.sig= list("hfpef"= hfpef[1:50],
-              "hfref"= hfref[1:50])
-sap
-diseasecluster
 
+dis.sig= list("HFpEF"= hfpef[1:71],
+              "HFrEF"= hfref[1:29])
+
+
+##jaccard
+df= sapply(dis.sig, function(x){
+  sapply(diseasecluster, function(y){
+    length(intersect(x,y))/length(x)
+  })
+})
+
+
+col_fun = colorRamp2(c(0,0.32), c("white", "darkred"))
+
+p.profile_percentage= Heatmap(t(df), col = col_fun, row_names_side = "left",
+        cluster_rows = F,
+        cluster_columns= F,
+        name= "% of\ncomorbidity\nprofile",
+        border= T,
+        rect_gp = gpar(col = "black", lwd = 1)
+        )
+
+pdf("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/figures/supp/comorbidity_net/patient_cluster_profile.pdf",
+    height = 1.5,
+    width=4)
+p.profile_percentage
+dev.off()
+
+
+##jaccard
 df= sapply(diseasecluster, function(x){
   sapply(dis.sig, function(y){
     length(intersect(x,y))/length(union(x,y))
@@ -446,4 +587,11 @@ GSE_analysis = function(geneList,Annotation_DB){
   return(ResultsDF)
 
 }
+
+
+
+
+# nomclust ----------------------------------------------------------------
+
+s= nomclust(data= mca.df, measure= "goodall1", eval = T)
 

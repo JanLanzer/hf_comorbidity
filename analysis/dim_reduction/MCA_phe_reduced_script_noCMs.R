@@ -36,10 +36,6 @@ source("~/GitHub/RWH_analysis/scripts/utils.R")
 directory= "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/"
 
 icd = readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/ICD10_labeled_phe2022.rds")
-#
-# #pids.list= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/cohort_pids/hf_types_pids.rds")
-# phedic= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/icd10_phewas_dictionary.rds")
-# icd = icd %>% left_join(phedic %>% distinct(PheCode, Phenotype))
 
 #load features
 phecodes= readRDS( "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/topfreq_disease.rds")
@@ -48,7 +44,7 @@ pids.list= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_c
 map(pids.list,length)
 
 pheno.data= readRDS(file= "T:/fsa04/MED2-HF-Comorbidities/data/processed_data/full_clinic_info.rds")
-
+pheno.data2= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/patient_metadata_2022.rds")
 
 
 # Functions ---------------------------------------------------------------
@@ -203,7 +199,7 @@ sum.tfilt= sum.t %>%
            PheCode_count,
            #icd10gm_count,
            charlson_score,
-           elixhauser_wscore,
+           elixhauser_score,
            ef.min,
            edd.max,
            ea.min,
@@ -268,54 +264,6 @@ hf.var= data.frame(matrix(nrow = length(unique(df$hf.type)),
                   )
 colnames(hf.var)= unique(df$hf.type)
 
-#
-# for (x in unique(df$hf.type)) {
-#   print(x)
-#   for (y in unique(df$hf.type)){
-#     print(y)
-#     if(x==y){
-#       hf.var[x,y]= 0
-#     }else{
-#       print( paste(x,"vs.",  y))
-#       hf_t = df %>% filter(hf.type== x)
-#       hf_f = df %>% filter(hf.type== y)
-#
-#       pvals= map(dim_, function(x){
-#         test. = wilcox.test(hf_t %>% pull(x),
-#                             hf_f%>% pull(x),
-#                             alternative = "two.sided")
-#         test.$p.value
-#       }) %>%unlist()
-#
-#       #combine with variance explained:
-#       eig.val <- get_eigenvalue(mca.res)
-#
-#       df.variance= eig.val[1:length(pvals),]
-#
-#       associated_hf =cbind(df.variance, pvals) %>%
-#         as_tibble%>%
-#         mutate(sig= ifelse(pvals<0.05, "sig", "ns"))%>%
-#         group_by(sig)%>%
-#         summarise(s= sum(variance.percent))
-#
-#       var.sum= associated_hf%>% filter(sig== "sig")%>% pull(s)
-#       print(var.sum)
-#
-#       #add to matrix
-#       hf.var[x,y]= var.sum
-#
-#       #names(var.sum)= paste(x,"vs.",  y)
-#       #return(c(var.sum, paste(x,"vs.",  y)))
-#
-#       }
-#
-#
-#   }
-# }
-#
-# ComplexHeatmap::Heatmap(hf.var)
-#
-
 
 #old way (just differnet data structure, same analysis)
 hftype= lapply(unique(df$hf.type), function(x){
@@ -374,28 +322,29 @@ p.cat= cat.df%>%filter(sig=="sig")%>%
   #theme_minimal_hgrid()
 
 ## loop over continous variables, perform cor.test
-cont.vars= c("ea.max", "median.bnp",
+cont.vars= c(
+             "median.bnp",
              "mean.sys",
              "mean.dias",
-             "edd.max",
-             "ee.max",
-             "age.at.icd",
-             "elixhauser_wscore",
+              "age.at.icd",
+             "elixhauser_score",
              "median.BMI",
              "median.LDL",
              "median.Chol",
              "median.HDL",
-           "median.Trigs",
-           "median.gfrcg",
-           "median.hba1c")
+           "median.Trigs")
+
 
 tested.vars.cont= map(cont.vars, function(x){
   print(x)
 
   pvals= map(dim_, function(y){
     test. = ind.df %>% select(!!as.symbol(x),
-                              !!as.symbol(y))
-    cor.test(test.[[x]], test.[[y]])$p.value
+                              !!as.symbol(y))%>%
+      drop_na()
+    #cor.test(test.[[x]], test.[[y]])$p.value
+    fit= lm(formula= paste0(y, " ~ ", x), data= test.)
+    summary(fit)$coefficients[2,4]
   }) %>%unlist()
 
   #combine with variance explained:
@@ -440,29 +389,29 @@ df.explained_V= df.explained_V%>% mutate(var= ifelse(var == "sex", "Sex", var),
                          var= ifelse(var == "mean.sys", "Systolic RR", var),
                          var= ifelse(var == "mean.dias", "Diastolic RR", var),
                          var= ifelse(var == "median.Chol", "Cholesterol", var),
-                         var= ifelse(var == "elixhauser_wscore", "Elixhauser Index", var),
-                         var= ifelse(var == "pci", "Percutaneous Coronary Intervention", var),
+                         var= ifelse(var == "elixhauser_score", "Elixhauser", var),
+                         var= ifelse(var == "pci", "PCI", var),
                          var= ifelse(var == "defi", "Device implant", var),
                          var= ifelse(var == "median.Trigs", "Triglycerides", var),
-                         var= ifelse(var == "edd.max", "Endiastolic Diameter", var),
                          var= ifelse(var == "intu", "Intubation", var),
-                         var= ifelse(var == "ea.max", "E/A", var),
                          var= ifelse(var == "median.hba1c", "HbA1c", var),
                          var= ifelse(var == "median.BMI", "BMI", var),
-                         var= ifelse(var == "ee.max", " E/e'", var),
-                         var= ifelse(var == "median.BMI", "BMI", var))
+                         var= ifelse(var == "median.HDL", "HDL", var),
+                         var= ifelse(var ==  "median.bnp","NT-ProBNP", var),
+                         var= ifelse(var == "median.LDL", "LDL", var))
 
 
 p.explained_V=
   df.explained_V%>%
   ggplot(., aes(x= reorder(var, s), y= s, fill = var.type))+
-  geom_hline(yintercept = c(20, 40, 60), color= "darkgrey")+
+  geom_hline(yintercept = c(20,30,40,50, 60,70), color= "darkgrey")+
   geom_col()+
   scale_fill_manual(values=cols.nice)+
   labs(y= "Estimated explained variance (%)",
        x= "Tested covariate",
        fill= "Variable type")+
   theme(legend.position =  "none")+
+  #scale_y_continuous(breaks = seq(0, 80, 10))+
   coord_flip()+
   theme_minimal()+
   theme(axis.text = element_text(color= "black"),
