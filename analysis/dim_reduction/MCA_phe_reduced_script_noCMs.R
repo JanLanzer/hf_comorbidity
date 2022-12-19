@@ -131,7 +131,7 @@ plot_MCA_results = function(res.mca){
 icd_red = icd %>%
   drop_na %>%
   distinct(pid, PheCode) %>%
-  filter(pid %in% c(pids.list$hfpef, pids.list$hfref, pids.list$hfmref),
+  filter(pid %in% c(pids.list$hfpef, pids.list$hfref, pids.list$hfmref, pids.list$hf_all),
                  PheCode %in% phecodes)
 
 # icd_red is full dataset to work with. This will now be subsetted to answer specific questions of interest.
@@ -718,12 +718,26 @@ umap.plot = as_tibble(cbind(as_tibble(umap_res$layout), pid=  rownames(df))) %>%
   mutate(hf= factor(hf, levels= c("HFpEF","HFmrEF", "HFrEF", "unlabeled")))# %>%
 
 p.umap.hf =ggplot(umap.plot, aes(x= V1, y= V2, color = hf))+
-  geom_point(alpha= 0.7, size= .5)+
+  geom_point(alpha= 0.7, size= .9)+
   #scale_color_manual(values=c( col.set[2], "#7FC6A4", col.set[3]))+
-  scale_color_manual(values= cols.nice[-3])+
+  #scale_color_manual(values= cols.nice[-3])+
+  scale_color_manual(values= c( "darkgreen", "orange", "blue","black"))+
   labs(color="HF cohort",
        x= "",
        y = "")+
   theme_classic()+
   guides(colour = guide_legend(override.aes = list(size=4)))
 
+p.umap.hf
+
+p2= ggMarginal(p.umap.hf+
+             theme(legend.position = "bottom")+
+             labs(col= "Patient\ncohort"),
+           type="density",groupColour = T,groupFill = F , size=3, margins = "both")
+p2
+
+
+pdf("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/figures/main/umap_full_cohort.pdf",
+    height= 6, width= 9)
+p2
+dev.off()

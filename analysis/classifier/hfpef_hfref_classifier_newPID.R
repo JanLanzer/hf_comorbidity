@@ -509,7 +509,7 @@ plot.df= do.call(rbind,p.estimates) %>%
                             ifelse(p_val<0.05, "<0.05", "ns")
                             )
                      ),
-         sig= factor(sig, levels=c("<0.001", "<0.01", "<0.05", "ns")),
+         sig= factor(sig, levels=(c("<0.001", "<0.01", "<0.05", "ns"))),
          label = ifelse(Phenotype %in% labels, Phenotype, "")
          )
 
@@ -520,27 +520,41 @@ p.distro=
 plot.df%>%mutate(dummy= 1)%>%
   ggplot(., aes(y=  estimate,
                 x= as.factor(cluster),
-                fill=  as.factor(cluster),
+                #fill=  as.factor(cluster),
                 #
                 label= label))+
 
   geom_hline(yintercept = 0, lty= 2)+
-  geom_jitter(aes(col = sig), size= 3)+
-  geom_boxplot(alpha= 0.9, width= 0.3, outlier.colour  = NA)+
+  geom_jitter(aes(col = sig), size= 1)+
+  geom_boxplot(alpha= 0.9, width= 0.3, outlier.colour  = NA, show.legend = F)+
   #scale_color_manual(values = rev(c("darkgrey", "#AA1430", "black", "#D62747")))+
   scale_color_manual(values = c("black",cols.nice[1:3]))+
   scale_fill_manual(values = col.set)+
   #facet_grid(cols= vars(cluster))+
-  theme_bw()
-  #scale_fill_gradient(low= "black" , high =  "yellow")+
+  theme_bw()+
+  labs(x= "Disease cluster",
+         y= "Disease parameter estiamte",
+       col= "p value")
+
+
+p.distro
+#scale_fill_gradient(low= "black" , high =  "yellow")+
   geom_label_repel(aes(label= label),
                    alpha= 0.8 ,
                    size= 3,
-                   max.overlaps = 100)
-  coord_flip()
+                   max.overlaps = 100)+
 
   # theme(axis.text.x  = element_blank(),
   #       axis.title.x = element_blank())
+
+  pdf("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/figures/supp/LR_sex.pdf",
+      width = 4,
+      height= 3)
+  unify_axis(p.distro)
+  dev.off()
+
+  saveRDS(plot.df, "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/output/lr_sex.data")
+
 
   map(clusts, function(x){
     pos <- position_jitter(width = 0.3, seed = 2)
