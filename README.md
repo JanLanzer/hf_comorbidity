@@ -17,14 +17,14 @@ We applied systems medicine concepts to analyze comorbidity profiles in a HF pat
 ## Analysis Workflow
 [Utilitary functions](https://github.com/JanLanzer/hf_comorbidity_genes/tree/master/analysis/utils)
 
-1) Multiple Correspondence Analysis
+1) Multiple Correspondence Analysis  
 [MCA](https://github.com/JanLanzer/hf_comorbidity_genes/blob/master/analysis/dim_reduction/MCA_phe_reduced_script_noCMs.R)  
 
-2) Patient Classifier
+2) Patient Classifier  
 [HFpEF_HFrEF_classifier](https://github.com/JanLanzer/hf_comorbidity_genes/blob/master/analysis/classifier/hfpef_hfref_classifier_newPID.R)  
 [feature_forward_selection](https://github.com/JanLanzer/hf_comorbidity_genes/blob/master/analysis/classifier/select_estimater_cut_off.R)
 
-3) HFnet Construction and Analysis
+3) HFnet Construction and Analysis  
 [test_comorbidities_between_HFpEF/HFrEF](https://github.com/JanLanzer/hf_comorbidity_genes/blob/master/analysis/network/HFnet/perform_three_way.R)  
 [construct_HFnet](https://github.com/JanLanzer/hf_comorbidity_genes/blob/master/analysis/network/HFnet/construct_HFnet_ML.R)  
 [cluster_HFnet](https://github.com/JanLanzer/hf_comorbidity_genes/blob/master/analysis/network/HFnet/hfnet_clustering.R)  
@@ -32,7 +32,7 @@ We applied systems medicine concepts to analyze comorbidity profiles in a HF pat
 [Disease_network_comparison](https://github.com/JanLanzer/hf_comorbidity_genes/blob/master/analysis/network/HFnet/compare_disease_networks.R)
 [Patient_cohort_and_disease_cluster_comparison](https://github.com/JanLanzer/hf_comorbidity_genes/blob/master/analysis/network/HFnet/patient_disease_cluster.R)
 
-4) HFhetnet Construction and Analysis
+4) HFhetnet Construction and Analysis  
 [Database_processings](https://github.com/JanLanzer/hf_comorbidity_genes/tree/master/analysis/network/data_base_processing)  
 [HFhetnet_construction](https://github.com/JanLanzer/hf_comorbidity_genes/blob/master/analysis/network/HFhetnet/create_hetnet.R)  
 [HFhetnet_graph_structure](https://github.com/JanLanzer/hf_comorbidity_genes/blob/master/analysis/network/HFhetnet/hetnet_characteristics.R)  
@@ -40,13 +40,15 @@ We applied systems medicine concepts to analyze comorbidity profiles in a HF pat
 [LOO_CV_disease_gene_prediction](https://github.com/JanLanzer/hf_comorbidity_genes/blob/master/analysis/network/HFhetnet/validation_disease_nodes.R)
 [HFhetnet_gene_prediction](https://github.com/JanLanzer/hf_comorbidity_genes/blob/master/analysis/network/HFhetnet/predict_hf_genes_ML.R)
 
-5) RNAseq
+5) RNAseq  
 [processing_and_gene_annotations](https://github.com/JanLanzer/hf_comorbidity_genes/blob/master/analysis/RNAseq/process_rnaseq.R)
 [Funcomics](https://github.com/JanLanzer/hf_comorbidity_genes/blob/master/analysis/RNAseq/funcomicx.R)
 [Differntial_expression_analysis](https://github.com/JanLanzer/hf_comorbidity_genes/blob/master/analysis/RNAseq/DEA.R)  
 
-##Citation
+## Citation
 Please find our [preprint](https://doi.org/10.21203/rs.3.rs-2429581/v1)
+
+Funded by [Informatics for Life](https://informatics4life.org/)
 
 A [workflowr][] project.
 
