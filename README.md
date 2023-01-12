@@ -41,11 +41,13 @@ We applied systems medicine concepts to analyze comorbidity profiles in a HF pat
 [HFhetnet_gene_prediction](https://github.com/JanLanzer/hf_comorbidity_genes/blob/master/analysis/network/HFhetnet/predict_hf_genes_ML.R)
 
 5) RNAseq  
-[processing_and_gene_annotations](https://github.com/JanLanzer/hf_comorbidity_genes/blob/master/analysis/RNAseq/process_rnaseq.R)
-[Funcomics](https://github.com/JanLanzer/hf_comorbidity_genes/blob/master/analysis/RNAseq/funcomicx.R)
+[processing_and_gene_annotations](https://github.com/JanLanzer/hf_comorbidity_genes/blob/master/analysis/RNAseq/process_rnaseq.R)  
+[Funcomics](https://github.com/JanLanzer/hf_comorbidity_genes/blob/master/analysis/RNAseq/funcomicx.R)  
 [Differntial_expression_analysis](https://github.com/JanLanzer/hf_comorbidity_genes/blob/master/analysis/RNAseq/DEA.R)  
 
 ## Citation
+Jan David Lanzer, Alberto Valdeolivas, Mark Pepin et al. A Network medicine approach to study comorbidities in heart failure with preserved ejection fraction, 11 January 2023, PREPRINT (Version 1) available at Research Square [https://doi.org/10.21203/rs.3.rs-2429581/v1]
+
 Please find our [preprint](https://doi.org/10.21203/rs.3.rs-2429581/v1)
 
 Funded by [Informatics for Life](https://informatics4life.org/)
