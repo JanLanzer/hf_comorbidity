@@ -1,4 +1,4 @@
-# A Network medicine approach to study comorbidities in heart failure with preserved ejection fraction
+# A network medicine approach to study comorbidities in heart failure with preserved ejection fraction
 
 ## Abstract
 
