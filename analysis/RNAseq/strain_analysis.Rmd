@@ -1,0 +1,201 @@
+---
+title: "HFD_strain_analysis"
+author: "Jan Lanzer"
+date: "11/21/2022"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup,  warning= F, message=F}
+
+library(ComplexHeatmap)
+library(decoupleR)
+library(progeny)
+library(dorothea)
+library(tidyverse)
+
+data("dorothea_mm")
+
+# Differential gene expression object
+dea= readRDS( "~/R-projects/hf_comorbidity_genes/output/dea.results.list.rds")
+#dea= readRDS( "../../output/dea.results.list.rds")
+
+# Gene expression object
+gex.obj= readRDS("~/R-projects/hf_comorbidity_genes/output/gex.obj.bulk.rds")
+
+```
+
+## PCA
+PCA to assess variance of across samples
+
+```{r PCA, warning=F, message=F}
+
+PCA <- prcomp(t(gex.obj$exp) ,center = TRUE, scale. = T)
+
+#Screeplot
+map(PCA$sdev, function(x){x^2/sum(PCA$sdev^2)})%>% 
+  unlist()%>% 
+  barplot()
+
+plot.pca = PCA$x %>%
+  as.data.frame %>%
+  rownames_to_column("Sample_ID") %>%
+  as_tibble()%>%
+  left_join(gex.obj$meta)
+
+
+
+p.pca=  ggplot(plot.pca,aes(x= PC1, y= PC2,color = Diet, shape= NNT))+
+  geom_point(size= 2)+
+  theme_minimal()+
+  labs(x= paste0("PC1 (",as.character(round(PCA$sdev[1]^2/sum(PCA$sdev^2)*100)),"%)"),
+       y= paste("PC2 (",as.character(round(PCA$sdev[2]^2/sum(PCA$sdev^2)*100)),"%)"))+
+  ggtitle(paste0(""))
+
+p.pca2=  ggplot(plot.pca,aes(x= PC3, y= PC4,color = Diet, shape= NNT))+
+  geom_point(size= 2)+
+  theme_minimal()+
+  labs(x= paste0("PC1 (",as.character(round(PCA$sdev[1]^2/sum(PCA$sdev^2)*100)),"%)"),
+       y= paste("PC2 (",as.character(round(PCA$sdev[2]^2/sum(PCA$sdev^2)*100)),"%)"))+
+  ggtitle(paste0(""))
+
+#  geom_text_repel(aes(label= Sample_ID),show.legend = FALSE)
+p.pca3 = ggplot(plot.pca,aes(x= PC1, y= PC2,color = Diet, shape= CaMK2))+
+  geom_point(size= 2)+
+  theme_minimal()+
+  labs(x= paste0("PC1 (",as.character(round(PCA$sdev[1]^2/sum(PCA$sdev^2)*100)),"%)"),
+       y= paste("PC2 (",as.character(round(PCA$sdev[2]^2/sum(PCA$sdev^2)*100)),"%)"))+
+  ggtitle(paste0(""))
+
+##plot PCA with N/J genotype:
+p.pca
+## plot PCA with CaMK2 genotype
+p.pca2
+
+## perform PCA regression to associate total variance
+
+.testvars= c("CaMK2", "Diet" , "NNT" )
+
+tested.vars.cont= map(.testvars, function(x){
+  #print(x)
+  #get dimensions
+  dim_ = colnames(plot.pca)[grepl("PC", colnames(plot.pca))]
+  
+  #calc associations with dimensions
+  pvals= map(dim_, function(y){
+    #print(y)
+    test. = plot.pca %>% select(!!as.symbol(x),
+                              !!as.symbol(y))
+    lev= unique(test.[[x]])
+    t.test(x= test.%>% filter(!!as.symbol(x) == lev[1])%>% pull(!!as.symbol(y)),
+                y= test.%>% filter(!!as.symbol(x) == lev[2])%>% pull(!!as.symbol(y)),
+                )$p.value
+  }) %>%unlist()
+
+  #combine with variance explained:
+  
+  eig.val <- map(PCA$sdev, function(x){x^2/sum(PCA$sdev^2)})%>% 
+    unlist()
+  
+  names(eig.val)<-dim_
+
+  associated_var =cbind(eig.val, pvals, dim_) %>%
+    as_tibble%>%
+    mutate(eig.val= as.numeric(eig.val), 
+           pvals= as.numeric(pvals))%>%
+    mutate(sig= ifelse(pvals<0.05, "sig", "ns"))%>%
+    group_by(sig)%>%
+    summarise(s= sum(eig.val))%>% 
+    filter(sig =="sig")%>% 
+    pull(s)
+
+  names(associated_var)= x
+  
+  return(associated_var*100)
+})
+
+#variance explained by variable
+
+print(round(unlist(tested.vars.cont),2))
+
+```
+
+
+
+## Funcomics
+We will compare the contrasts \
+1. within diets HFD: J vs N and CON: J vs N\
+2. within genotypes J: CON vs HFD as well as N: CON vs HFD\
+Each contrast will be used to compute TF-activities and pathway activities by footprint enrichment
+
+```{r funcomics, echo=T, warning=F}
+# merge multiple contrasts by t-value 
+
+get_matrix= function(c.list){
+
+  y = map(c.list, function(x){
+    x$t
+  })
+
+  M= do.call(cbind, y)
+  rownames(M)= c.list[[1]]$gene
+  return(M)
+}
+
+M.T= get_matrix(dea)
+
+# prepare TFs
+regulons= dorothea_mm %>%
+  filter(confidence %in% c("A", "B", "C")) %>%
+  mutate(likelihood=1)
+
+dec.res = decouple(M.T,
+                   network = regulons,
+
+                   .source ="tf",
+                   .target = "target",
+                   statistics = "wmean",
+
+                   consensus_score = F
+
+)
+
+tf.oi= dec.res%>%
+  group_by(condition)%>%
+  filter(statistic== "norm_wmean",
+         any(p_value<0.05))%>%
+  slice_max(order_by = score, n=10)%>%
+  pull(source) %>% unique()
+
+df= dec.res %>%
+  group_by(condition) %>%
+  filter(source %in% tf.oi,
+         statistic== "norm_wmean") %>%
+  dplyr::select(condition, source, score) %>%
+  pivot_wider(names_from = "condition",
+              values_from = "score")
+
+p1= df %>% column_to_rownames("source")%>%
+  Heatmap()
+
+print(p1)
+
+```
+
+```{r Progeny}
+
+# progeny_scores
+x= progeny(expr = M.T, organism = "Mouse", top = 200)
+
+p2= Heatmap(t(x))
+
+# progeny z-scores
+PathwayActivity_zscore <- progeny(M.T,
+                                  scale=TRUE, organism="Mouse", top = 100, perm = 10000, z_scores = TRUE) %>%
+  t()
+
+Heatmap(PathwayActivity_zscore[,], name = "PROGNEy z-score")
+
+```
+
