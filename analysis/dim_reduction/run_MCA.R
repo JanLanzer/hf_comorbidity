@@ -222,7 +222,7 @@ ind.df= ind.df%>%   mutate(hf.type = ifelse(ID %in% pids.list$hfref,
 dim_= paste0("Dim", seq(1:ndims-1))
 
 df= ind.df
-## loop over categorical variables with two levels and perform wilcox
+## loop over categorical variables with two levels and perform  LR
 cat.vars= c( "sex",  "intu", "defi", "pci")
 
 tested.vars= map(cat.vars, function(x){
