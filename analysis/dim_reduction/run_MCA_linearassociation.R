@@ -129,9 +129,9 @@ plot_MCA_results = function(res.mca){
 
 # Data subsetting (pre MCA) -----------------------------------------------------------------------
 icd_red = icd %>%
-  drop_na %>%
+  #drop_na %>%
   distinct(pid, PheCode) %>%
-  filter(pid %in% c(pids.list$hfpef, pids.list$hfref, pids.list$hfmref),# pids.list$hf_all),
+  filter(pid %in% c(pids.list$hfpef, pids.list$hfref, pids.list$hfmref),
                  PheCode %in% phecodes)
 
 # icd_red is full dataset to work with. This will now be subsetted to answer specific questions of interest.
@@ -155,17 +155,14 @@ ndims= length(unique(icd_red$PheCode))
 
 mca.res = MCA(mca.df, ncp = ndims)
 
-mca.res.df= plot_MCA_df(mca.res, ndim  =ndims )
+mca.res.df= plot_MCA_df(mca.res2, ndim  =ndims)
 
-
+dim(mca.res.df)
 # add clinical covariates -------------------------------------------------
 #add.pheno.data
 
 ind.df= mca.res.df %>%
   filter(VAR== "ind")
-#%>%
-#  left_join(pheno.data %>% dplyr::rename(ID= patient_id)%>% mutate(ID =as.character(ID)), by= "ID")
-
 
 # add clinical endpoints:
 endpoint= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/cohort_pids/pids_endpoints.rds")
@@ -207,9 +204,14 @@ sum.tfilt= sum.t %>%
            ee.max)
 
 
-ind.df= ind.df %>% left_join(sum.tfilt%>% dplyr::rename(ID= pid)%>% mutate(ID= as.character(ID)), by= "ID")
+#merge:
+
+ind.df= ind.df %>%
+  left_join(sum.tfilt%>% dplyr::rename(ID= pid)%>%
+              mutate(ID= as.character(ID)), by= "ID")
 
 #add.patient.cohort:
+
 ind.df= ind.df%>%   mutate(hf.type = ifelse(ID %in% pids.list$hfref,
                                             "hfref",
                                             ifelse(ID %in% pids.list$hfpef,
@@ -217,55 +219,18 @@ ind.df= ind.df%>%   mutate(hf.type = ifelse(ID %in% pids.list$hfref,
                                                    ifelse(ID %in% pids.list$hfmref,
                                                           "hfmref",
                                                           "unlabeled"))))
-## run wilcox to see if it associates dim1 with hf
 
+
+# perform association testing ---------------------------------------------
+
+#dim names
 dim_= paste0("Dim", seq(1:ndims-1))
 
+#copy
 df= ind.df
-## loop over categorical variables with two levels and perform  LR
-cat.vars= c( "sex",  "intu", "defi", "pci")
 
-tested.vars= map(cat.vars, function(x){
-  print(x)
-  levels= unique(df[[x]])
-  print(levels)
-  hf_t = df %>% filter((!!as.symbol(x))== levels[1])
-  hf_f = df %>% filter((!!as.symbol(x))== levels[2])
+## test for HF subtypes:
 
-  pvals= map(dim_, function(x){
-    test. = wilcox.test(hf_t %>% pull(x),
-                        hf_f%>% pull(x),
-                        alternative = "two.sided")
-    test.$p.value
-  }) %>%unlist()
-
-  #combine with variance explained:
-  eig.val <- get_eigenvalue(mca.res)
-
-  df.variance= eig.val[1:length(pvals),]
-
-  associated_hf =cbind(df.variance, pvals) %>%
-    as_tibble%>%
-    mutate(sig= ifelse(pvals<0.05, "sig", "ns"))%>%
-    group_by(sig)%>%
-    summarise(s= sum(variance.percent)) %>%
-    mutate(var= x)
-
-})
-
-cat.df= do.call(rbind, tested.vars)%>%filter(sig=="sig")
-
-#redo for hf.type (4 levels)
-###
-hf.var= data.frame(matrix(nrow = length(unique(df$hf.type)),
-                          ncol = length(unique(df$hf.type))
-                          ),
-                   row.names = unique(df$hf.type)
-                  )
-colnames(hf.var)= unique(df$hf.type)
-
-
-#old way (just differnet data structure, same analysis)
 hftype= lapply(unique(df$hf.type), function(x){
   sapply(unique(df$hf.type), function(y){
     if(x==y){return(0)}
@@ -274,12 +239,23 @@ hftype= lapply(unique(df$hf.type), function(x){
     hf_t = df %>% filter(hf.type== x)
     hf_f = df %>% filter(hf.type== y)
 
-    pvals= map(dim_, function(x){
-      test. = wilcox.test(hf_t %>% pull(x),
-                          hf_f%>% pull(x),
-                          alternative = "two.sided")
-      test.$p.value
+    hf_t= df %>% filter(hf.type %in% c(x,y))
+
+    pvals= map(dim_, function(y1){
+
+      test. = hf_t %>% select(!!as.symbol(y1),hf.type)%>%
+        drop_na()
+
+      fit= lm(formula= paste0(y1, " ~ ", "hf.type"), data= test.)
+      summary(fit)$coefficients[2,4]
     }) %>%unlist()
+#
+#     pvals= map(dim_, function(x){
+#       test. = wilcox.test(hf_t %>% pull(x),
+#                           hf_f%>% pull(x),
+#                           alternative = "two.sided")
+#       test.$p.value
+#     }) %>%unlist()
 
     #combine with variance explained:
     eig.val <- get_eigenvalue(mca.res)
@@ -296,34 +272,25 @@ hftype= lapply(unique(df$hf.type), function(x){
     print(var.sum)
 
     #add to matrix
-    hf.var[x,y]= var.sum
+    #hf.var[x,y]= var.sum
 
     #names(var.sum)= paste(x,"vs.",  y)
     return(c(var.sum, paste(x,"vs.",  y)))
   })
 })
 
+#summarize:
 
-
-cat.df= rbind(cat.df,
+hf.df= as_tibble(rbind(
       c("sig",hftype[[1]]$hfpef[1], "HFrEF v. HFpEF" ),
       c("sig",hftype[[1]]$hfmref[1], "HFmrEF v. HFrEF" ),
       c("sig",hftype[[2]]$hfmref[1], "HFmrEF v. HFpEF" )
-      )%>%
-  mutate(s = as.numeric(s))
+      ))%>%
+  mutate(V2 = as.numeric(V2))
 
-
-p.cat= cat.df%>%filter(sig=="sig")%>%
-  ggplot(., aes(x= reorder(var, s), y= s))+
-  geom_col()+
-  labs(y= "percentage of variance explained (%)",
-       x= "tested covariate")+
-  theme(legend.position =  "none")#+
-  #theme_minimal_hgrid()
-
+colname
 ## loop over continous variables, perform cor.test
-cont.vars= c(
-             "median.bnp",
+cont.vars= c("median.bnp",
              "mean.sys",
              "mean.dias",
               "age.at.icd",
@@ -334,14 +301,17 @@ cont.vars= c(
              "median.HDL",
            "median.Trigs")
 
+cat.vars= c( "sex",  "intu", "defi", "pci")
 
-tested.vars.cont= map(cont.vars, function(x){
+
+tested.vars.cont= map(c(cat.vars, cont.vars), function(x){
   print(x)
 
   pvals= map(dim_, function(y){
     test. = ind.df %>% select(!!as.symbol(x),
                               !!as.symbol(y))%>%
       drop_na()
+    print(unique(test.[[x]]))
     #cor.test(test.[[x]], test.[[y]])$p.value
     fit= lm(formula= paste0(y, " ~ ", x), data= test.)
     summary(fit)$coefficients[2,4]
@@ -362,25 +332,17 @@ tested.vars.cont= map(cont.vars, function(x){
 })
 
 tested.vars.cont
-#
-# p.cont= do.call(rbind, tested.vars.cont)%>%
-#   filter(sig=="sig")%>%
-#   ggplot(., aes(x= reorder(var, -s), y= s))+
-#   geom_col()+
-#   labs(y= "percentage of variance explained (%)",
-#        x= "tested covariate")+
-#   theme(legend.position =  "none")+
-#   theme_minimal_hgrid()
-cowplot::plot_grid(p.cat, p.cont, align = "h")
-
 
 #plot both tests together:
 
-df.explained_V= rbind(do.call(rbind, tested.vars.cont) , cat.df)%>%
+df.explained_V= do.call(rbind, tested.vars.cont) %>%
   mutate(var.type= ifelse(var %in% cat.vars, "categorical","continuous"))%>%
   mutate(var.type = ifelse(grepl("HF", var), "categorical",var.type))%>%
-  filter(sig=="sig")
+  filter(sig=="sig")%>% arrange(s)
 
+colnames(hf.df) = c("sig", "s", "var")
+hf.df= hf.df%>% mutate(var.type= "categorical")
+df.explained_V= rbind(df.explained_V, hf.df)
 
 #clean var names
 
@@ -405,7 +367,7 @@ p.explained_V=
   df.explained_V%>%
   ggplot(., aes(x= reorder(var, s), y= s, fill = var.type))+
   geom_hline(yintercept = c(20,30,40,50, 60,70), color= "darkgrey")+
-  geom_col()+
+  geom_col(color= "black", width= 0.7)+
   scale_fill_manual(values=cols.nice)+
   labs(y= "Estimated explained variance (%)",
        x= "Tested covariate",
@@ -424,7 +386,7 @@ p.explained_V=
 p.explained_V
 
 
-pdf("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/figures/main/explained_V.pdf",
+pdf("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/figures/main/explained_V2.pdf",
     height = 4, width= 6)
 unify_axis(p.explained_V)
 

@@ -37,6 +37,10 @@ feat.vector= comp_feat%>% filter(estimate!= 0) %>% arrange(desc(abs(estimate))) 
 
 comp_feat= comp_feat%>% filter(PheCode  %in% feat.vector[1:100])
 
+ML.class= comp_feat %>% mutate(hf = ifelse( estimate< 0, "hfpef",
+                                            ifelse(estimate>0, "hfref", "ns")
+                                            )
+                               )
 
 # get gene ranking for hfpef and hfref nodes ------------------------------
 
@@ -55,10 +59,6 @@ PPI_Disease_Net <- create.multiplexHet(ppi_net_multiplex,
 PPIHetTranMatrix <- compute.transition.matrix(PPI_Disease_Net)
 
 
-ML.class= comp_feat %>% mutate(hf = ifelse( estimate< 0, "hfpef",
-                                          ifelse(estimate>0, "hfref", "ns")
-                                          )
-                              )
 
 seed.hfpef= ML.class %>% filter(hf=="hfpef")%>% pull(PheCode)
 #tau.hfpef= ML.class %>% filter(hf=="hfpef")%>% pull(estimate)%>% abs()

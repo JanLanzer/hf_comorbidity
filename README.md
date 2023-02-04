@@ -18,7 +18,7 @@ We applied systems medicine concepts to analyze comorbidity profiles in a HF pat
 [Utilitary functions](https://github.com/JanLanzer/hf_comorbidity_genes/tree/master/analysis/utils)
 
 1) Multiple Correspondence Analysis  
-[MCA](https://github.com/JanLanzer/hf_comorbidity_genes/blob/master/analysis/dim_reduction/MCA_phe_reduced_script_noCMs.R)  
+[MCA](https://github.com/JanLanzer/hf_comorbidity_genes/blob/master/analysis/dim_reduction/run_MCA.R)  
 
 2) Patient Classifier  
 [HFpEF_HFrEF_classifier](https://github.com/JanLanzer/hf_comorbidity_genes/blob/master/analysis/classifier/hfpef_hfref_classifier_newPID.R)  

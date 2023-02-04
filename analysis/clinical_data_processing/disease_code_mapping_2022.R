@@ -60,17 +60,18 @@ table(unique(data$entry_value) %in% phewas2$ICD10)
 
 
 #add another icd10 code version XXX.X (icd4)
-data= data %>%
+data2= data %>%
   mutate(icd4 =  str_replace(entry_value, "(\\..).","\\1"),
          icd3 = substr(entry_value,1,3 )) %>%
   distinct(entry_value, pid, entity, icd3, icd4)
 
-table(unique(data$entry_value) %in% unique(old_phe_dic$entry_value))
-table(unique(data$icd4) %in% unique(old_phe_dic$icd4))
-table(unique(data$icd3) %in% unique(old_phe_dic$icd3))
+table(unique(data2$entry_value) %in% unique(old_phe_dic$entry_value))
+table(unique(data2$icd4) %in% unique(old_phe_dic$icd4))
+table(unique(data2$icd3) %in% unique(old_phe_dic$icd3))
 
-icd10_lab = data
-phewas2= phewas2.mod
+icd10_lab = data2
+#phewas2= phewas2.mod
+
 #now perform a stepwise mapping, using different versions of the icd10 code to map to phewas
 #1. map XXX.XX
 icd10_1= icd10_lab %>%
@@ -112,6 +113,11 @@ icd10_phewas= icd10_phewas %>%
               select(-phenotype, -phecode_exclude_range))
 
 
+#add entry_date back
+
+icd10_phewas= icd10_phewas%>% full_join(data%>% select(-entry_time),
+                          by= c("pid", "entity", "entry_value")
+                          )
 saveRDS(icd10_phewas, file ="T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/ICD10_labeled_phe2022.rds")
 
 
