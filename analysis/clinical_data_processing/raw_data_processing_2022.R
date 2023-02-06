@@ -1,7 +1,7 @@
 ## loading data from research data warehouse containing requested clinical variables.
 
 library(vctrs, lib.loc = .libPaths()[1])
-library(tidyverse, lib.loc = .libPaths()[1])
+library(tidyverse)
 
 library(skimr)
 
@@ -474,4 +474,27 @@ full_lipids= full_join(bmi, tri) %>% full_join(hdl) %>% full_join(ldl) %>% full_
 
 saveRDS(full_lipids, file.path(directory, "median_lipids_20221006.rds"))
 
+
+# process risk factors ----------------------------------------------------
+
+risk= raw %>% filter(grepl("^demografie.risiko", entity))%>%
+  select(-entry_time)%>% as_tibble()
+
+risk %>%
+  saveRDS(., file.path(directory, "risk.factors.2023.rds") )
+
+double.pid= risk %>%
+  dplyr::group_by(pid, entry_date, entity) %>%
+  dplyr::summarise(n = dplyr::n(), .groups = "drop") %>%
+  dplyr::filter(n > 1L) %>%
+  print(n=100)%>%
+  pull(pid)
+
+risk2= risk%>%
+  filter(!pid %in% double.pid)%>%
+  pivot_wider(names_from = entity, values_from = entry_value)
+
+
+
+unique(risk2$demografie.risikofaktor.nikotinanamnese)
 

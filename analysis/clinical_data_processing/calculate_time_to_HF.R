@@ -19,6 +19,8 @@
 
 library(tidyverse)
 library(lubridate)
+library(qdapTools)
+
 source("~/GitHub/RWH_analysis/scripts/utils.R")
 # read tables.
 
@@ -167,46 +169,41 @@ df= icd%>%  filter(pid %in% pids.list$hf_all,
     )%>%
     distinct(pid, entry_date, hf.type)
 
+
 df  %>%
   filter(hf.type != "unlabeled")%>%
-  ggplot(aes(x= entry_date,fill= hf.type))+
-  geom_histogram(stat= "count", bins= 150)+
+  ggplot(aes(x= as.Date(entry_date),fill= hf.type))+
   facet_grid(rows= vars(hf.type))+
+  geom_histogram(aes(y=..count../sum(..count..)))+
+  theme(axis.text.x = element_text(angle= 90, hjust= 1))
+
+df  %>%
+  filter(hf.type != "unlabeled")%>%
+  ggplot(aes(x= as.Date(entry_date),fill= hf.type))+
+  facet_grid(rows= vars(hf.type))+
+  geom_histogram(bins= 100)+
   theme(axis.text.x = element_text(angle= 90, hjust= 1))
 
 
 
-intervalls_per_disease= map2(dis1,dis2, function(x,y){
 
-  #print(c(x,y))
-  pat_dis1 = icd10_grouped %>%
-    filter(any(PheCode==x)) %>% # every patient with disease 1
-    filter(any(PheCode==y)) %>% # every patient with diesease 1 and 2
-    filter(PheCode ==x | PheCode ==y) %>% # remove other diseases
-    distinct(pid, entry_date, PheCode)%>% # remove duplicate entries from the same entry_date
-    arrange(pid)
+df  %>%
+  filter(hf.type != "unlabeled")%>%
+  ggplot(aes(y= as.Date(entry_date),x= hf.type))+
+  geom_boxplot()+
+  stat_compare_means(method = "wilcox.test",comparisons =  list(c("hfpef", "hfref"),
+                                                                c("hfpef", "hfmref"),
+                                                                c("hfmref", "hfref")
+  )
+  )
 
-  date1 = pat_dis1 %>% filter(PheCode == x) %>%
-    arrange(pid, entry_date) %>%
-    mutate(first_diagnoseX= min(entry_date,na.rm = T)) %>%
-    distinct(pid, first_diagnoseX)   # arrange takes the first date to the front
-
-  date2= pat_dis1 %>% filter(PheCode == y) %>%
-    arrange(pid,entry_date) %>%
-    mutate(first_diagnoseY= min(entry_date,na.rm = T)) %>%
-    distinct(pid, first_diagnoseY)
-
-  intervals= date1 %>%
-    left_join(date2, by= "pid") %>%
-    mutate(interval= (first_diagnoseX %--% first_diagnoseY)/dmonths(1) ) #calculate the interval in months
-
-  return(intervals %>% pull(interval))
-})
-
+  facet_grid(rows= vars(hf.type))+
+  theme(axis.text.x = element_text(angle= 90, hjust= 1))
 
 # test whether the time to HF as a variable to in a log regression  ----------------
 source("analysis/utils/utils_classifier_ML.R")
 source("analysis/utils/utils.R")
+
 cl.= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/networks/comorbidity/hfnet.rds")
 se= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/full_clinic_info.rds")
 sum.t= readRDS(file = "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/patient_metadata_2022.rds")
@@ -220,7 +217,9 @@ prep_data= function(time.calc){
 
   ## additional data will be sex, time to diagnosis and age
   #ML.class$PheCode
-  mod_df2= mod_df[,c("hf", ML.class$PheCode)]
+
+  dis = colnames(mod_df)[colnames(mod_df)  %in% ML.class$PheCode]
+  mod_df2= mod_df[,c("hf", dis)]
 
 
   ## add sex
@@ -390,73 +389,135 @@ bind_rows(res2)%>%
   labs(x= "", y= "")
 
 
-#############################################
-net= igraph::as_data_frame(cl. , "vertices")%>% as_tibble()
-dc.6= net %>% filter(group_louv== 6)%>% pull(name)
-dc.1= net %>% filter(group_louv== 1)%>% pull(name)
 
-split(ML.class, ML.class$hf)
+# test time blocks of patient visits to assess possible confoundin --------
 
-fit_LR_subset= function(dc, mod_df){
-  mod_df2= mod_df[,c("hf", dc)]
 
-  f.p =sum.t %>% filter(sex== "f")%>% pull(pid)
-  m.p= sum.t %>%filter(sex== "m")%>% pull(pid)
+#define time blocks:
 
-  mod_df2= mod_df2 %>% rownames_to_column("pid")  %>%
-    mutate(sex = ifelse(pid %in% f.p,"f","u"),
-           sex = ifelse(pid %in% m.p,"m",sex))%>%
-    filter(sex %in% c("m", "f"))%>%
-    mutate(sex= factor(sex, levels= c("f", "m"))) %>%
-    mutate(hf= factor(hf, levels= c("hfpef", "hfref")))
+time.sub= time.calc %>% filter(hf.type != "unlabeled")%>%filter(entry_date> as_date("2008-01-01"))
+t.r= range(time.sub$entry_date)
 
-  mod_df2= column_to_rownames(.data = mod_df2, var = "pid")
 
-  colnames(mod_df2)= paste0("x", colnames(mod_df2))
-  form  = paste(x =   unlist(colnames(mod_df2)[-1]), collapse= "+")
+number_of_breaks= 3
+# we translate the start and endpoint into a time interval in months:
+total_y= interval(start = as_date(t.r[1]), as_date(t.r[2]))/dyears()
 
-  fit = glm(formula= as.formula(paste0("xhf ~ ", form)),
-            data = mod_df2,
-            family= "binomial")
-  coef(summary(fit))
-}
+one_int = total_y/number_of_breaks
 
-x= fit_LR_subset(dc.6, mod_df)
-x2= fit_LR_subset(dc.1, mod_df)
 
-diseases= dc.6
+time.blocks= lapply(seq(1,number_of_breaks,1),  function(x){
+  print(x)
+  #compute intervals
+  end.t= one_int*x
+  start.t= one_int*(x-1)
 
-clusts= unique(net$group_louv)
+  #translate intervals into dates
+  min.date= as_date(t.r[1]) %m+% years(round(start.t, 0))
+  max.date= as_date(t.r[1]) %m+% years(round(end.t, 0))
 
-p.estimates= map(clusts, function(y){
-  #print(y)
-  diseases= net %>% filter(group_louv== y)%>% pull(name)
+  #subset date to time interval
+  df= time.calc %>% filter(entry_date> min.date,
+                           entry_date< max.date)
 
-  x= fit_LR_subset(diseases, mod_df)
+  #prepare model dataframe
+  mod_df2= prep_data(df)
 
-  df= map(diseases, function(x){
-    #print(x)
-    f= fit_LR_subset(x, mod_df)
-    coef(summary(f))
+
+  #map every disease of interest to get a single comorbidity log regression
+  #estimate
+  df2= map(ML.class$PheCode, function(dis){
+    print(dis)
+    #if disease is not in df,  abort)
+    if(! dis %in% colnames(mod_df2)){
+      return(NULL)
+    }
+
+    #if the disease has less than three patients in that period than we cannot model it
+    if(sum(mod_df2[,dis])<10){
+      return(NULL)
+    }
+
+    mod_df3= mod_df2[, c("pid", "hf", dis,"sex", "age.at.icd" ) ]
+
+    mod_df3= column_to_rownames(.data = mod_df3, var = "pid")
+
+    colnames(mod_df3)[2] = paste0("x", dis)
+    form  = paste(x =   unlist(colnames(mod_df3)[-1]), collapse= "+")
+
+    fit = glm(formula= as.formula(paste0("hf ~ ", form)),
+              data = mod_df3,
+              family= "binomial")
   })
-  names(df)= diseases
-
-  tag = map(df, function(x){
-    x[2,4]
-  })%>%
-    unlist() %>%
-    enframe(., value = "p_val")
-
-  tag2 = map(df, function(x){
-    x[2,1]
-  })%>% unlist()%>% enframe(., value = "estimate")
-
-  df= tag %>% left_join(tag2)%>%
-    left_join(Phe_dic %>%
-                rename(name= PheCode))%>%
-    mutate(cluster= y)
 
 
 })
+
+names(time.blocks)= paste0("time_intervall", 1:length(time.blocks))
+
+res2= lapply(names(time.blocks), function(df){
+
+  df2= map(time.blocks[[df]], function(x){
+
+    if(is.null(x)){return(NULL)}
+
+    y= coef(summary(x))%>% as.data.frame()%>%
+      rownames_to_column("coefficient")%>%
+      as_tibble() %>%
+      mutate("model"=  names(x$coefficients[2]))
+    return(y)
+  })
+  bind_rows(df2)%>% mutate(data= df)
+
+})
+
+
+names(res2) = names(time.blocks)
+
+
+bind_rows(res2) %>%
+  filter(grepl("x", coefficient))%>%
+  mutate(sig= ifelse(`Pr(>|z|)`< 0.01, "**",
+                     ifelse(`Pr(>|z|)`<0.05, "*", "")))%>%
+  ggplot(aes(x= data, y= reorder(coefficient,Estimate),  fill = Estimate,label=sig))+
+  geom_tile()+
+  scale_fill_gradient2(low= "blue", mid= "white", high="red")+
+  geom_text()
+
+
+#use data frame form above to check possible outliers:
+
+df= icd%>%  filter(pid %in% pids.list$hf_all,
+                   PheCode %in% phecodes) %>%
+  mutate(hf.type = ifelse(pid %in% pids.list$hfref,
+                          "hfref",
+                          ifelse(pid %in% pids.list$hfpef,
+                                 "hfpef",
+                                 ifelse(pid %in% pids.list$hfmref,
+                                        "hfmref",
+                                        "unlabeled")
+                          )
+  )
+  )%>%
+  distinct(pid, entry_date, hf.type, PheCode)
+
+
+outliers= c("709.7", "800.1", "348.2")
+
+map(outliers, function(x){
+  df %>%
+    filter(hf.type != "unlabeled",
+           PheCode ==x)%>%
+    ggplot(aes(x= as.Date(entry_date),fill= hf.type))+
+    facet_grid(rows= vars(hf.type))+
+    geom_histogram(bins= 50)+
+    theme(axis.text.x = element_text(angle= 90, hjust= 1))+
+    ggtitle(x)
+
+})
+
+
+
+
 
 
