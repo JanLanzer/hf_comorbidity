@@ -19,6 +19,7 @@
 
 library(tidyverse)
 
+directory= "T:/fsa04/MED2-HF-Comorbidities/data/processed_data/sept2022"
 risks= readRDS(file.path(directory, "risk.factors.2023.rds"))
 
 
@@ -84,7 +85,7 @@ risk4 = risk4 %>%group_by(pid)%>%
   filter(n==maxn)%>%
   distinct()
 
-risk4
+prop.table(table( c(pids.list$hfpef, pids.list$hfref, pids.list$hfmref) %in% risk4$pid))
 
 
 library(ComplexHeatmap)

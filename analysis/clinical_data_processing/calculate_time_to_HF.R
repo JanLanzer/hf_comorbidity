@@ -20,8 +20,12 @@
 library(tidyverse)
 library(lubridate)
 library(qdapTools)
+library(ggpubr)
+library(ComplexHeatmap)
 
-source("~/GitHub/RWH_analysis/scripts/utils.R")
+#source("~/GitHub/RWH_analysis/scripts/utils.R")
+source("analysis/utils/utils_classifier_ML.R")
+source("analysis/utils/utils.R")
 # read tables.
 
 directory= "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/"
@@ -62,6 +66,7 @@ ML.class= comp_feat %>% mutate(hf = ifelse( estimate< 0, "hfpef",
 
 
 
+
 # calculate for each diagnosis in our cohort and comorbidities tim --------
 
 #get df with earliest HF diagnosis
@@ -88,6 +93,39 @@ time.calc= icd%>%
                           )
          )
 
+# Add patient visit frequency ---------------------------------------------
+
+visit.freq= time.calc %>% distinct(pid,hf.type, entry_date) %>% #group_by(pid)%>%
+  count(pid)
+time.calc= time.calc %>% left_join(visit.freq)
+
+p.histo_visits= time.calc %>%
+  filter(hf.type!= "unlabeled")%>%
+  ggplot(aes(x= n))+
+  geom_histogram(bins= 100)+
+  facet_grid(rows = vars(hf.type))
+
+p.histo_visits
+
+p.box_visits= time.calc %>%
+  filter(hf.type!= "unlabeled")%>%
+  ggplot(aes(x= hf.type, y= n))+
+  geom_violin()+
+  geom_boxplot(width= 0.5)+
+  scale_y_log10()+
+  stat_compare_means(method = "wilcox.test",
+                    comparisons = list(c("hfpef", "hfref"),
+                                       c("hfmref", "hfpef"),
+                                       c("hfref", "hfmref"))
+                    )  +
+  labs(x= "", y= "number of unique entry dates per patient")+
+  theme_bw()+
+  theme(axis.text = element_text(color="black", size= 11))
+
+p.box_visits
+
+# plot time_to_HF ---------------------------------------------------------
+
 
 ## plot results for all for full data
 
@@ -105,19 +143,24 @@ time.calc %>%
 
 
 
-time.calc%>%
+p.time_to_HF= time.calc%>%
     filter( hf.type!= "unlabeled",)%>%
-    ggplot(aes(x= hf.type, y= time_to_HF, fill= hf.type))+
-    geom_hline(yintercept = c(-12,12,-24, 24,0))+
+    ggplot(aes(x= hf.type, y= time_to_HF))+
+    geom_hline(yintercept = c(-12,12,-24, 24,0), color= "grey", lty= 2)+
     geom_violin()+
     geom_boxplot(width = 0.2, fill = "white", outlier.shape = NA)+
     stat_compare_means(method = "wilcox.test",comparisons =  list(c("hfpef", "hfref"),
                                                                 c("hfpef", "hfmref"),
                                                                 c("hfmref", "hfref")
-                                                                )
-                     )
+                                                                ))+
+  labs(x= "", y= "time to first HF diagnosis (months)")+
+  theme_bw()+
+  theme(axis.text = element_text(color="black", size= 11))
 
-  #by disease cat
+p.time_to_HF
+
+
+#by disease cat
 time.calc %>%
   filter(hf.type!= "unlabeled")%>%
   ggplot(.,aes(x= time_to_HF, fill= hf.type))+
@@ -144,7 +187,7 @@ time.calc%>%
   left_join(ML.class)%>%
   filter(!is.na(hf) &  hf.type!= "unlabeled",)%>%
   ggplot(aes(x= hf.type, y= time_to_HF, fill= hf))+
-  geom_boxplot()
+  geom_violin()
   stat_compare_means(method = "wilcox.test",comparisons =  list(c("hfpef", "hfref"),
                                                                 c("hfpef", "hfmref"),
                                                                 c("hfmref", "hfref")
@@ -171,38 +214,64 @@ df= icd%>%  filter(pid %in% pids.list$hf_all,
 
 
 df  %>%
+  filter(entry_date> as_date("2008-01-01"))%>%
   filter(hf.type != "unlabeled")%>%
   ggplot(aes(x= as.Date(entry_date),fill= hf.type))+
   facet_grid(rows= vars(hf.type))+
   geom_histogram(aes(y=..count../sum(..count..)))+
   theme(axis.text.x = element_text(angle= 90, hjust= 1))
 
-df  %>%
+p.visitsHIST= df  %>%
+  filter(entry_date> as_date("2008-01-01")) %>%
   filter(hf.type != "unlabeled")%>%
   ggplot(aes(x= as.Date(entry_date),fill= hf.type))+
   facet_grid(rows= vars(hf.type))+
   geom_histogram(bins= 100)+
-  theme(axis.text.x = element_text(angle= 90, hjust= 1))
+  theme(axis.text.x = element_text(angle= 90, hjust= 1))+
+  theme_bw()+
+  theme(axis.text = element_text(color="black", size= 11))+
+  labs(x="date of comorbidity recording")
 
+p.visitsHIST
 
-
-
-df  %>%
+p.visits.BOX= df  %>%
   filter(hf.type != "unlabeled")%>%
+  filter(entry_date> as_date("2008-01-01"))%>%
   ggplot(aes(y= as.Date(entry_date),x= hf.type))+
-  geom_boxplot()+
+  geom_violin()+
+  geom_boxplot(width= 0.5)+
   stat_compare_means(method = "wilcox.test",comparisons =  list(c("hfpef", "hfref"),
                                                                 c("hfpef", "hfmref"),
                                                                 c("hfmref", "hfref")
   )
-  )
+  )+
+  labs(x= "", y= "date of comorbidity recording")+
+  theme_bw()+
+  theme(axis.text = element_text(color="black", size= 11))
+p.visits.BOX
 
-  facet_grid(rows= vars(hf.type))+
-  theme(axis.text.x = element_text(angle= 90, hjust= 1))
+p.visits= cowplot::plot_grid(p.visitsHIST, p.visits.BOX, labels="AUTO",
+                   rel_widths = c(1,0.5))
+
+
+pdf("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/figures/supp/patient_visits_overtime.pdf",
+    height= 6, width= 9)
+p.visits
+dev.off()
+
+
+pdf("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/figures/supp/boxplots_time_confounders.pdf",
+    height= 8, width= 4)
+
+cowplot::plot_grid(#p.box_visits,
+                   p.time_to_HF,
+                   p.visits.BOX,
+                   ncol = 1)
+
+dev.off()
 
 # test whether the time to HF as a variable to in a log regression  ----------------
-source("analysis/utils/utils_classifier_ML.R")
-source("analysis/utils/utils.R")
+
 
 cl.= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/networks/comorbidity/hfnet.rds")
 se= readRDS("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/data/hf_cohort_data/full_clinic_info.rds")
@@ -236,6 +305,12 @@ prep_data= function(time.calc){
   ## add age
   #sum.t
   mod_df2= mod_df2 %>% inner_join(sum.t %>% select(pid, age.at.icd)%>% mutate(pid= as.character(pid)))
+
+  ## add n visits
+
+  mod_df2 = mod_df2 %>%
+    left_join(visit.freq %>% mutate(pid= as.character(pid)), by= "pid")
+
 
 }
 
@@ -306,6 +381,9 @@ bind_rows(df2)%>%
 
 
 
+# test whether coefficents change if assesed before or after HF -----------
+
+
 ##### next we will split the original data into diagnosis made before and after HF
 
 preHF= time.calc%>% filter(time_to_HF< -6)
@@ -323,9 +401,19 @@ res= lapply(list("pre"=preHF,
 
   df= map(ML.class$PheCode, function(dis){
 
+    if(! dis %in% colnames(mod_df2)){
+      return(NULL)
+    }
+
+    #if the disease has less than three patients in that period than we cannot model it
+    if(sum(mod_df2[,dis])<15){
+      return(NULL)
+    }
 
 
-  mod_df3= mod_df2[, c("pid", "hf", dis,"sex", "age.at.icd" ) ]
+
+
+  mod_df3= mod_df2[, c("pid", "hf", dis,"sex", "age.at.icd") ]
 
   mod_df3= column_to_rownames(.data = mod_df3, var = "pid")
 
@@ -338,9 +426,11 @@ res= lapply(list("pre"=preHF,
   })
 
 })
+
 #names(res) = c("pre", "post")
 res2= lapply(names(res), function(df){
   df2= map(res[[df]], function(x){
+    if(is.null(x)){return(NULL)}
     coef(summary(x))%>% as.data.frame()%>%
       rownames_to_column("coefficient")%>%
       as_tibble() %>%
@@ -361,10 +451,14 @@ bind_rows(res2) %>%
   geom_text()
 
 bind_rows(res2)%>%
-  filter(grepl("x1", coefficient))
+  filter(coefficient =="n")%>%
+  pull(Estimate)%>%
+  hist()
+
+bind_rows(res2)%>%
+  filter(coefficient =="n")%>% print(n=2000)
 
 ## check neoplasms:
-
 
 neoplasms= ML.class%>% filter(category == "neoplasms")%>%
   mutate(PheCode= paste0("x", PheCode))%>%
@@ -395,11 +489,14 @@ bind_rows(res2)%>%
 
 #define time blocks:
 
-time.sub= time.calc %>% filter(hf.type != "unlabeled")%>%filter(entry_date> as_date("2008-01-01"))
+time.sub= time.calc %>% filter(hf.type != "unlabeled")%>%
+  filter(entry_date> as_date("2008-01-01"))
+
 t.r= range(time.sub$entry_date)
 
-
+# set number of equal time intervals:
 number_of_breaks= 3
+
 # we translate the start and endpoint into a time interval in months:
 total_y= interval(start = as_date(t.r[1]), as_date(t.r[2]))/dyears()
 
@@ -427,14 +524,14 @@ time.blocks= lapply(seq(1,number_of_breaks,1),  function(x){
   #map every disease of interest to get a single comorbidity log regression
   #estimate
   df2= map(ML.class$PheCode, function(dis){
-    print(dis)
+    #print(dis)
     #if disease is not in df,  abort)
     if(! dis %in% colnames(mod_df2)){
       return(NULL)
     }
 
     #if the disease has less than three patients in that period than we cannot model it
-    if(sum(mod_df2[,dis])<10){
+    if(sum(mod_df2[,dis])<15){
       return(NULL)
     }
 
@@ -453,9 +550,17 @@ time.blocks= lapply(seq(1,number_of_breaks,1),  function(x){
 
 })
 
-names(time.blocks)= paste0("time_intervall", 1:length(time.blocks))
+names(time.blocks)=
+  lapply(seq(c(1:number_of_breaks)), function(x){
+    print(x)
+    paste(as_date(t.r[1]) %m+% years(round(one_int*(x-1), 0)),
+          as_date(t.r[1]) %m+% years(round(one_int*x, 0)),
+          sep=" -> "
+    )
 
-res2= lapply(names(time.blocks), function(df){
+  })%>% unlist()
+
+res3= lapply(names(time.blocks), function(df){
 
   df2= map(time.blocks[[df]], function(x){
 
@@ -472,20 +577,193 @@ res2= lapply(names(time.blocks), function(df){
 })
 
 
-names(res2) = names(time.blocks)
+names(res3) = names(time.blocks)
 
+### plot coefficent of the diseases:
 
-bind_rows(res2) %>%
-  filter(grepl("x", coefficient))%>%
+H.timeblocks= bind_rows(res3) %>%
+  filter(grepl("^x", coefficient))%>%
+  mutate(coefficient= str_replace_all(coefficient, "x", ""))%>%
+  left_join(ML.class %>%
+              rename(coefficient= PheCode)%>%
+              select(Phenotype, coefficient, category))%>%
   mutate(sig= ifelse(`Pr(>|z|)`< 0.01, "**",
                      ifelse(`Pr(>|z|)`<0.05, "*", "")))%>%
-  ggplot(aes(x= data, y= reorder(coefficient,Estimate),  fill = Estimate,label=sig))+
-  geom_tile()+
-  scale_fill_gradient2(low= "blue", mid= "white", high="red")+
+  ggplot(aes(x= data, y= reorder(Phenotype,Estimate),  fill = Estimate,label=sig))+
+  geom_tile(color="black")+
+  scale_fill_gradient2(low= "blue", mid= "white", high="red", na.value = "darkgrey")+
+  #scale_fill_continuous(na.value = 'yellow')+
   geom_text()
 
+H.timeblocks %>%
+  arrange(Estimate)%>%
+  filter(Phenotype=="Malignant neoplasm of female breast")
 
-#use data frame form above to check possible outliers:
+H.timeblocks= unify_axis(H.timeblocks+theme_classic())+
+  theme(axis.text.x = element_text(angle= 60, hjust= 1))+
+  labs(x= "data subset to time interval",
+       y= "")
+
+pdf("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/figures/supp/timeblocks_coeff3.pdf",
+    height= 15, width= 7)
+H.timeblocks
+  dev.off()
+
+
+
+
+
+
+# plot large HMAP together: -----------------------------------------------
+
+big.HMAP= rbind(bind_rows(res2), bind_rows(res3))
+saveRDS(big.HMAP, "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/figures/supp/single_disease_LR_models.rds")
+hmap.df= big.HMAP %>%
+  filter(grepl("^x", coefficient))%>%
+    mutate(coefficient= str_replace_all(coefficient, "x", ""))%>%
+    left_join(ML.class %>%
+                rename(coefficient= PheCode)%>%
+                select(Phenotype, coefficient, category)
+              )%>%
+  mutate(sig= ifelse(`Pr(>|z|)`< 0.01, "**",
+                     ifelse(`Pr(>|z|)`<0.05, "*", "")),
+         data = str_replace_all(data, "pre", "pre HF"),
+         data = str_replace_all(data, "post", "post HF"),
+         data = str_replace_all(data, "all", "full data"))
+
+df1= hmap.df%>% select(coefficient, Estimate,`Pr(>|z|)`, model , data, Phenotype, category, sig )
+df2= ML.class%>% rename(Estimate= estimate, coefficient= PheCode)%>%
+  mutate(data= "elastic.net",
+         `Pr(>|z|)`= NA,
+         model = "PheCode",
+         sig= NA)%>%
+  select(coefficient, Estimate,`Pr(>|z|)`, model , data, Phenotype, category, sig )
+
+hmap.df2= rbind(df1, df2)
+
+### Quantify agreement of direction:
+
+dr= hmap.df2 %>%
+  group_by(data)%>%
+  mutate(s.Est= sign(Estimate))%>%
+  group_by(coefficient)%>%
+  mutate(sum. = sum(s.Est))
+
+dr %>%
+  filter(data %in% c("pre HF", "post HF"))%>%
+  mutate(s.Est= sign(Estimate))
+
+dr%>%
+  ggplot(aes(y= sum., x= reorder(Phenotype,sum.)))+
+  geom_point()
+  scale_fill_gradient2(low= "blue", mid= "white", high="red", na.value = "darkgrey")+
+  #scale_fill_continuous(na.value = 'yellow')+
+  geom_text()+
+  theme(axis.text.x = element_text(angle= 40, hjust=1))
+
+
+hmap.df2%>%
+    ggplot(aes(x= data, y= reorder(Phenotype,Estimate),  fill = Estimate,label=sig))+
+    geom_tile(color="black")+
+    scale_fill_gradient2(low= "blue", mid= "white", high="red", na.value = "darkgrey")+
+    #scale_fill_continuous(na.value = 'yellow')+
+    geom_text()+
+  theme(axis.text.x = element_text(angle= 40, hjust=1))
+
+## Complex Heatmap with blocks:
+hmap.df%>%
+  filter(category=="neoplasms")%>%
+  print(n=100)
+hmap.df2= hmap.df2 %>%
+  select(data, Estimate, Phenotype)%>%
+  pivot_wider(names_from= data, values_from = Estimate)%>%
+  as.data.frame()%>%
+  column_to_rownames("Phenotype")
+
+hmap.df2= hmap.df2[, c("full data", "pre HF", "post HF",
+       "2008-01-02 -> 2013-01-02",
+       "2013-01-02 -> 2018-01-02" ,
+       "2018-01-02 -> 2022-01-02" )]
+
+df.P= hmap.df%>%
+  select(data, `Pr(>|z|)`, Phenotype)%>%
+  pivot_wider(names_from= data, values_from = `Pr(>|z|)`)%>%
+    as.data.frame()%>%
+  column_to_rownames("Phenotype")
+
+
+df.P= df.P[, c("full data", "pre HF", "post HF",
+               "2008-01-02 -> 2013-01-02",
+               "2013-01-02 -> 2018-01-02" ,
+               "2018-01-02 -> 2022-01-02" )]
+
+
+big.hmap = Heatmap(hmap.df2[, c("full data", "pre HF", "post HF",
+               "2008-01-02 -> 2013-01-02",
+               "2013-01-02 -> 2018-01-02" ,
+               "2018-01-02 -> 2022-01-02" )],
+        cluster_columns = F, row_names_side = "left",
+        row_dend_side = "right",
+        name= "Logistic\nRegression\nEstimate",
+        column_names_rot = 60,
+        row_names_max_width = unit(15, "cm"),
+        column_split = c("full",
+                         "time to HF","time to HF",
+                         "subset to years","subset to years","subset to years"),
+        # cell_fun = function(j, i, x, y, w, h, fill) {
+        #   if(df.P[i, j] < 0.01) {
+        #     grid.text("**", x, y)
+        #   } else if(df.P[i, j] < 0.05) {
+        #     grid.text("*", x, y)
+        #   }
+        # }
+
+        )
+big.hmap
+
+pdf("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/figures/supp/combined_time_hmap.pdf",
+    height= 14.6, width= 9)
+draw(big.hmap)
+dev.off()
+
+big.hmap_slim= Heatmap(hmap.df2[, c("full data", "pre HF", "post HF",
+                          "2008-01-02 -> 2013-01-02",
+                          "2013-01-02 -> 2018-01-02" ,
+                          "2018-01-02 -> 2022-01-02" )],
+
+
+                   cluster_columns = F,
+                   show_row_names = F,
+                   row_dend_side = "right",
+                   name= "Logistic\nRegression\nEstimate",
+                   column_names_rot = 90,
+                   #row_names_max_width = unit(15, "cm"),
+                   column_split = c("full",
+                                    "time to HF","time to HF",
+                                    "years","years","years"),
+
+                   # cell_fun = function(j, i, x, y, w, h, fill) {
+                   #   if(df.P[i, j] < 0.01) {
+                   #     grid.text("**", x, y)
+                   #   } else if(df.P[i, j] < 0.05) {
+                   #     grid.text("*", x, y)
+                   #   }
+                   # }
+
+)
+big.hmap_slim
+pdf("T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/figures/supp/combined_time_hmap_slim2.pdf",
+    height= 14.6, width= 4)
+draw(big.hmap_slim)
+dev.off()
+
+
+
+# sandbox -----------------------------------------------------------------
+
+
+
+  #use data frame form above to check possible outliers:
 
 df= icd%>%  filter(pid %in% pids.list$hf_all,
                    PheCode %in% phecodes) %>%
@@ -515,6 +793,10 @@ map(outliers, function(x){
     ggtitle(x)
 
 })
+
+
+
+
 
 
 

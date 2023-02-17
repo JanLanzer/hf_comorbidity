@@ -23,6 +23,8 @@ We applied systems medicine concepts to analyze comorbidity profiles in a HF pat
 2) Patient Classifier  
 [HFpEF_HFrEF_classifier](https://github.com/JanLanzer/hf_comorbidity_genes/blob/master/analysis/classifier/hfpef_hfref_classifier_newPID.R)  
 [feature_forward_selection](https://github.com/JanLanzer/hf_comorbidity_genes/blob/master/analysis/classifier/select_estimater_cut_off.R)
+[time_point_and_time_to_HF](https://github.com/JanLanzer/hf_comorbidity_genes/blob/master/analysis/classifier/calculate_time_to_HF.R)
+
 
 3) HFnet Construction and Analysis  
 [test_comorbidities_between_HFpEF/HFrEF](https://github.com/JanLanzer/hf_comorbidity_genes/blob/master/analysis/network/HFnet/perform_three_way.R)  

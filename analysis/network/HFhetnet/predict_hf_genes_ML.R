@@ -36,7 +36,7 @@ feat.vector= comp_feat%>% filter(estimate!= 0) %>% arrange(desc(abs(estimate))) 
   pull(PheCode)
 
 comp_feat= comp_feat%>% filter(PheCode  %in% feat.vector[1:100])
-
+#comp_feat= comp_feat%>% filter(PheCode  %in% feat.vector[1:50])
 ML.class= comp_feat %>% mutate(hf = ifelse( estimate< 0, "hfpef",
                                             ifelse(estimate>0, "hfref", "ns")
                                             )
@@ -144,8 +144,6 @@ g.ranks %>% arrange(desc(hfpef.prio))%>% filter(grepl("PPA", gene))
 sets= load_validation_genes(disgenet_value= 0.29)
 names(sets)= c("DisGeNET", "PheWAS", "Kegg_DCM", "ReHeaT", "r2", "Cardiomyopathy", "Top_single_variants", "Top_common_variants")
 sets= sets[-5]
-sets$Top_single_variants
-sets$Top_common_variants
 val.set= unique(unlist(sets))
 length(unique(unlist(sets)))
 
@@ -266,3 +264,137 @@ pef= do_auc_on_vec(gg,"hfpef.prio", sets)
 ref= do_auc_on_vec(gg,"hfref.prio", sets)
 
 
+
+# add randomized comorbidity set prediction to calculate z-AUROC ----------
+
+#we use teh same hfhetnet representation:
+
+seed.hfpef= ML.class %>% filter(hf=="hfpef")%>% pull(PheCode)
+
+seed.hfref= ML.class %>% filter(hf=="hfref")%>% pull(PheCode)
+
+sets= load_validation_genes(disgenet_value= 0.29)
+names(sets)= c("DisGeNET", "PheWAS", "Kegg_DCM", "ReHeaT", "r2", "Cardiomyopathy", "Top_single_variants", "Top_common_variants")
+sets= sets[-5]
+
+
+set.seed(5)
+get_AUROC_dist= function(seed1= seed.hfpef,
+                         nperm= 10,
+                         sets){
+
+
+  df1= lapply(1:nperm, function(p){
+
+    diseases= PPI_Disease_Net$Multiplex2$Pool_of_Nodes
+    diseases= diseases[!diseases %in% c(seed1)]
+
+    seeds= sample(diseases, length(seed1), replace = F)
+
+    g.rank <-
+      Random.Walk.Restart.MultiplexHet(x= PPIHetTranMatrix,
+                                       MultiplexHet_Object = PPI_Disease_Net,
+                                       Multiplex1_Seeds= c(),
+                                       Multiplex2_Seeds = seeds,
+                                       #tau2= tau.hfpef2,
+                                       r=0.8)
+
+    g.rank= g.rank$RWRMH_Multiplex1 %>%
+      rename(value= Score,
+             name= NodeNames)%>% as_tibble()
+
+    FIND= sapply(sets, function(set){
+
+      res = validate_results2(set = set,
+                              gene_results = g.rank)
+
+      c("PR_AUC"= res$pr$auc.integral,
+        "AUROC" =res$roc$auc)
+
+    } )
+  })
+
+  #names(df1)= paste0("rep.", 1:nperm)
+  do.call(rbind, df1)%>%
+    as.data.frame()%>%
+    rownames_to_column("metric")
+}
+
+r= get_AUROC_dist(seed1 = seed.hfpef,
+                  sets= sets,
+                  nperm= 1000)
+
+r2= get_AUROC_dist(seed1 = seed.hfref,
+                  sets= sets,
+                  nperm= 1000)
+
+
+calc_z= function(distro, real_score){
+  real_score = real_score %>%
+    as.data.frame() %>%
+    rownames_to_column("metric")
+
+  distro= as_tibble(distro)%>%
+    mutate(metric= str_replace_all(metric, ".[0-9]", ""))
+
+  df= sapply(unique(real_score$metric), function(x){
+    sapply(colnames(real_score)[-1], function(y){
+
+      X= distro%>% filter(metric == x) %>% pull(!!as.symbol(y))
+      Y= real_score %>% filter(metric == x) %>% pull(!!as.symbol(y))
+
+      Z= (Y- mean(X)) / sd(X)
+
+      })
+  })
+  df %>% as.data.frame()%>% rownames_to_column("set")
+
+}
+
+p.map=rbind(calc_z(r, pef)%>% mutate("comor"= "HFpEF"),
+            calc_z(r2, ref)%>% mutate("comor"= "HFrEF")
+            )%>%
+  pivot_longer(cols = c(PR_AUC, AUROC) , names_to= "metric", values_to = "value")
+
+
+p.zs= p.map%>% ggplot(., aes(x= set, y= value, col = comor))+
+  geom_point(size = 2)+
+  geom_hline(yintercept = c(1.65, -1.65, -1.96,1.96), col = "darkgrey")+
+  coord_flip()+
+  facet_grid(rows= vars(metric))+
+  labs(x= "HF gene set",
+       y= "z-score",
+       color= "comorbidity\nprofile")+
+  theme_bw()+
+  theme(axis.text = element_text(size= 11, color= "black"))+
+  scale_y_continuous(breaks= c(1.65, -1.65, 0,-1.96,1.96))
+p.zs
+
+pdf(file = "T:/fsa04/MED2-HF-Comorbidities/lanzerjd/manuscript/figures/supp/hetnet/HF_geneset_zscores.pdf",
+    width= 5.5,
+    height= 3.5)
+p.zs
+dev.off()
+
+Heatmap(p.map)
+
+
+g.ref= g.ranks %>% select(gene, hfref.prio)%>% arrange(hfref.prio)%>%
+  rename(name= gene,
+         value= hfref.prio)%>%
+  mutate(value= abs(value))
+g.pef= g.ranks %>% select(gene, hfpef.prio)%>% arrange(hfpef.prio)%>%
+  rename(name= gene,
+         value= hfpef.prio)%>%
+  mutate(value= abs(value))
+
+pef= sapply(sets, function(x){
+  res = validate_results2(set = x, gene_results = g.pef)
+  c("PR_AUC"= res$pr$auc.integral,
+    "AUROC" =res$roc$auc)
+})
+ref= sapply(sets, function(x){
+  res = validate_results2(x, g.ref)
+  c("PR_AUC"= res$pr$auc.integral,
+    "AUROC" =res$roc$auc)
+})

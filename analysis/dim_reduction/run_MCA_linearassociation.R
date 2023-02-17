@@ -155,7 +155,7 @@ ndims= length(unique(icd_red$PheCode))
 
 mca.res = MCA(mca.df, ncp = ndims)
 
-mca.res.df= plot_MCA_df(mca.res2, ndim  =ndims)
+mca.res.df= plot_MCA_df(mca.res, ndim  =ndims)
 
 dim(mca.res.df)
 # add clinical covariates -------------------------------------------------
@@ -288,8 +288,8 @@ hf.df= as_tibble(rbind(
       ))%>%
   mutate(V2 = as.numeric(V2))
 
-colname
-## loop over continous variables, perform cor.test
+
+## loop over variables, perform cor.test
 cont.vars= c("median.bnp",
              "mean.sys",
              "mean.dias",
@@ -311,7 +311,7 @@ tested.vars.cont= map(c(cat.vars, cont.vars), function(x){
     test. = ind.df %>% select(!!as.symbol(x),
                               !!as.symbol(y))%>%
       drop_na()
-    print(unique(test.[[x]]))
+    #print(unique(test.[[x]]))
     #cor.test(test.[[x]], test.[[y]])$p.value
     fit= lm(formula= paste0(y, " ~ ", x), data= test.)
     summary(fit)$coefficients[2,4]
@@ -340,7 +340,7 @@ df.explained_V= do.call(rbind, tested.vars.cont) %>%
   mutate(var.type = ifelse(grepl("HF", var), "categorical",var.type))%>%
   filter(sig=="sig")%>% arrange(s)
 
-colnames(hf.df) = c("sig", "s", "var")
+colnames(hf.df) = c("sig", "s", "var", "var.type")
 hf.df= hf.df%>% mutate(var.type= "categorical")
 df.explained_V= rbind(df.explained_V, hf.df)
 
